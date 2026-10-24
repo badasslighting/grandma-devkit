@@ -2,7 +2,7 @@
   "name": "ma3dev",
   "displayName": "MA3dev for VScode",
   "description": "Write grandMA3 Lua plugins: API completion, hover and signature help, plugin scaffolding, one-command deploy, manifest and blocking-loop checks.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -24,16 +24,35 @@
   "contributes": {
     "languages": [{ "id": "lua", "extensions": [".lua"], "aliases": ["Lua"] }],
     "snippets": [{ "language": "lua", "path": "./snippets/lua.json" }],
+    "configurationDefaults": {
+      "[lua]": { "editor.quickSuggestions": { "other": true, "comments": false, "strings": true } }
+    },
     "commands": [
       { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA3" },
       { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA3" },
+      { "command": "ma3.packagePlugin", "title": "Bump Version and Package Plugin (zip)", "category": "grandMA3" },
+      { "command": "ma3.deployAndRun", "title": "Deploy and Reload on Console", "category": "grandMA3" },
       { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA3" },
       { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA3" },
       { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA3" },
+      { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA3", "icon": "$(refresh)" },
+      { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA3" },
+      { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA3" },
+      { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA3" },
+      { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA3" },
       { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA3" },
       { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA3" }
     ],
+    "views": {
+      "explorer": [{ "id": "ma3.objects", "name": "grandMA3 Objects" }]
+    },
     "menus": {
+      "view/title": [{ "command": "ma3.objects.refresh", "when": "view == ma3.objects", "group": "navigation" }],
+      "view/item/context": [
+        { "command": "ma3.objects.copyPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@1" },
+        { "command": "ma3.objects.copyAddress", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@2" },
+        { "command": "ma3.objects.insertPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@3" }
+      ],
       "editor/context": [
         { "command": "ma3.runOnConsole", "when": "editorLangId == lua", "group": "ma3" },
         { "command": "ma3.deploy", "when": "resourceExtname == .lua || resourceExtname == .xml", "group": "ma3" }
@@ -52,6 +71,12 @@
           "default": false,
           "description": "Copy a plugin's files to the plugins folder whenever one of its .lua or .xml files is saved."
         },
+        "ma3.deployAndRun.slot": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Plugin pool slot that **Deploy and Reload on Console** imports the plugin into and starts, through the LuaBridge plugin. 0 only deploys. Use onPC with a throwaway show: the slot is overwritten."
+        },
         "ma3.dataVersion": {
           "type": "string",
           "default": "2.0.0.0",
@@ -67,6 +92,16 @@
           "default": 2,
           "minimum": 0.1,
           "markdownDescription": "Seconds of CPU time a run may use before the bridge stops it. The console UI is frozen for that long, and time spent in `coroutine.yield` counts."
+        },
+        "ma3.liveCompletion": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Inside `Cmd(\"...\")` strings, complete group, sequence, macro, preset and similar numbers with the labels from the show running in onPC, through the LuaBridge plugin. The lookup takes a few milliseconds of console time, at most once a minute, and only while the bridge is running."
+        },
+        "ma3.lint.globals": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hint when a variable is assigned without \"local\" and so becomes a global shared with every plugin."
         },
         "ma3.diagnostics": {
           "type": "boolean",

@@ -1,0 +1,24 @@
+name: Publish to Open VSX
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Tag must match package.json version
+        run: |
+          v=$(node -p "require('./package.json').version")
+          test "v$v" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match package.json version $v"; exit 1; }
+      - run: npm test
+      - run: npx --yes @vscode/vsce package
+      - name: Publish
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx --yes ovsx publish ./*.vsix -p "$OVSX_PAT"
