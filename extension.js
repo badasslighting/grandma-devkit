@@ -337,23 +337,29 @@ function activate(context) {
   );
 
   // ---- diagnostics
+  // Every Lua finding with its span and, where there is one, a fix; diagnostics and quick fixes both come from here.
+  function lintDoc(doc) {
+    const text = doc.getText();
+    const target = targetOf(doc);
+    const findings = findBlockingLoops(text).map((f) => ({
+      line: f.line,
+      rule: 'blocking-loop',
+      severity: 'warning',
+      message: `Loop never yields, breaks or returns; it will freeze the console. Add ${target === 'ma2' ? 'gma.sleep(seconds)' : 'coroutine.yield(seconds)'} or use a timer.`,
+      fix: { kind: 'yield', text: target === 'ma2' ? 'gma.sleep(0.1)' : 'coroutine.yield(0.1)' },
+    }));
+    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), target }));
+  }
+  const findingRange = (doc, f) =>
+    f.len ? new vscode.Range(f.line, f.col, f.line, f.col + f.len) : doc.lineAt(Math.min(f.line, doc.lineCount - 1)).range;
   function refresh(doc) {
     if (!cfg().get('diagnostics')) return diagnostics.delete(doc.uri);
     const found = [];
     const lineRange = (line) => doc.lineAt(Math.min(line, doc.lineCount - 1)).range;
     if (doc.languageId === 'lua') {
-      for (const f of findBlockingLoops(doc.getText())) {
-        found.push(
-          new vscode.Diagnostic(
-            lineRange(f.line),
-            'Loop never yields, breaks or returns; it will freeze the console. Add coroutine.yield(seconds) or use Timer().',
-            vscode.DiagnosticSeverity.Warning
-          )
-        );
-      }
       const sev = { warning: vscode.DiagnosticSeverity.Warning, hint: vscode.DiagnosticSeverity.Hint };
-      for (const f of lintRules(doc.getText(), index.api, { globals: cfg().get('lint.globals'), target: targetOf(doc) })) {
-        const d = new vscode.Diagnostic(lineRange(f.line), f.message, sev[f.severity]);
+      for (const f of lintDoc(doc)) {
+        const d = new vscode.Diagnostic(findingRange(doc, f), f.message, sev[f.severity]);
         d.code = f.rule;
         found.push(d);
       }
@@ -366,6 +372,49 @@ function activate(context) {
     }
     diagnostics.set(doc.uri, found);
   }
+  // Quick fixes: the finding that produced a diagnostic is found again by rule and position.
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      LUA,
+      {
+        provideCodeActions(doc, range, ctx) {
+          const actions = [];
+          const findings = ctx.diagnostics.length ? lintDoc(doc) : [];
+          for (const d of ctx.diagnostics) {
+            const f = findings.find((x) => x.rule === d.code && x.line === d.range.start.line && (x.len ? x.col === d.range.start.character : true));
+            if (!f || !f.fix) continue;
+            const edit = new vscode.WorkspaceEdit();
+            let title;
+            if (f.fix.kind === 'replace') {
+              title = `Replace with "${f.fix.text}"`;
+              edit.replace(doc.uri, d.range, f.fix.text);
+            } else if (f.fix.kind === 'insert') {
+              title = `Insert "${f.fix.text.trim()}"`;
+              edit.insert(doc.uri, d.range.start, f.fix.text);
+            } else if (f.fix.kind === 'yield') {
+              const line = doc.lineAt(f.line);
+              if (!/\bdo\s*$/.test(line.text)) continue;
+              const indent = /^\s*/.exec(line.text)[0];
+              title = `Add ${f.fix.text} to the loop`;
+              edit.insert(doc.uri, line.range.end, `\n${indent}    ${f.fix.text}`);
+            } else continue;
+            const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+            action.edit = edit;
+            action.diagnostics = [d];
+            action.isPreferred = f.fix.kind === 'replace';
+            actions.push(action);
+          }
+          return actions;
+        },
+      },
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
+    )
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('ma3')) vscode.workspace.textDocuments.forEach(refresh);
+    })
+  );
   vscode.workspace.textDocuments.forEach(refresh);
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument(refresh),

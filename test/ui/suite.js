@@ -297,6 +297,31 @@ testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', as
   assert.ok(bridge.status(dir).running, 'the original bridge is running again');
 });
 
+test('quick fixes: replace a misspelt function, add local, and add a yield to a blocking loop', async () => {
+  const { doc } = await openLua('fixes.lua', 'printf("x")\nwhile true do\n  local a = 1\nend\nlater = 1\nreturn 1\n');
+  await vscode.workspace.getConfiguration('ma3').update('lint.globals', true, vscode.ConfigurationTarget.Global);
+  try {
+    await until(() => vscode.languages.getDiagnostics(doc.uri).length >= 3, 'three diagnostics');
+    const actionsAt = async (line) => (await vscode.commands.executeCommand('vscode.executeCodeActionProvider', doc.uri, new vscode.Range(line, 0, line, 3))) || [];
+    const apply = async (line, titlePart) => {
+      const a = (await actionsAt(line)).find((x) => x.title.includes(titlePart));
+      assert.ok(a, `no action containing "${titlePart}" on line ${line}`);
+      assert.ok(await vscode.workspace.applyEdit(a.edit));
+    };
+    await apply(0, 'Replace with "Printf"');
+    assert.strictEqual(doc.lineAt(0).text, 'Printf("x")');
+    await apply(1, 'coroutine.yield(0.1)');
+    assert.strictEqual(doc.lineAt(2).text, '    coroutine.yield(0.1)');
+    assert.strictEqual(doc.lineAt(3).text, '  local a = 1');
+    await until(() => vscode.languages.getDiagnostics(doc.uri).some((d) => d.code === 'global-assign'), 'global-assign diagnostic');
+    const line = doc.getText().split('\n').findIndex((l) => l.startsWith('later'));
+    await apply(line, 'Insert "local"');
+    assert.strictEqual(doc.lineAt(line).text, 'local later = 1');
+  } finally {
+    await vscode.workspace.getConfiguration('ma3').update('lint.globals', undefined, vscode.ConfigurationTarget.Global);
+  }
+});
+
 test('Set Up Lua Language Server Definitions writes the stubs and links them from .luarc.json', async () => {
   const stubs = path.join(ws, '.vscode', 'grandma-stubs');
   const luarc = path.join(ws, '.luarc.json');
