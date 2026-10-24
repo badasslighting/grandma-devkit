@@ -8,6 +8,7 @@ Unofficial community tool, not affiliated with or endorsed by MA Lighting. grand
 - **grandMA3: New Plugin** creates `Name/Name.lua` and `Name/Name.xml`.
 - **grandMA3: Deploy Plugin to Plugins Folder** copies the manifest and the Lua files it names to the console's plugins folder (`ma3.pluginsPath`; defaults to the onPC folder on Windows). `ma3.deployOnSave` does it on every save.
 - **grandMA3: Copy Import Command for Plugin** copies `Import Plugin Library "Name" At Plugin N /nc`.
+- **grandMA3: Run File or Selection on Console** runs the file (or the selected lines) in grandMA3 onPC through the LuaBridge plugin and prints return values, `Printf`/`Echo` output and errors to the **grandMA3** output panel. A Lua error is also marked on its editor line. Start the LuaBridge plugin on the console first; **LuaBridge Status** checks its heartbeat and **LuaBridge: Clear Globals** drops what earlier runs left behind. Settings: `ma3.bridge.dir` (default `%ProgramData%/MA3/luabridge`) and `ma3.bridge.timeout` (CPU seconds, default 2; the console UI is frozen that long). Use it on onPC with a throwaway show: anything that can write the bridge folder can run Lua in grandMA3.
 - **Checks**: manifest problems (missing DataVersion, Name or Lua file, no top-level `return`) and `while true do` loops that never yield, break or return.
 - Snippets: `ma3plugin`, `cmd`, `printf`, `forchildren`, `pcall`, `yield`.
 
@@ -21,4 +22,4 @@ npm run build-api  # rebuild data/api.json from the local HelpLua file
 npm run package    # build the .vsix
 ```
 
-Not covered yet: enum completion, running code on a console.
+Not covered yet: enum completion, redeploy-and-run in one step, live-show completion, grandMA2.
