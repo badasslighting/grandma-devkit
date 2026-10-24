@@ -297,6 +297,47 @@ testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', as
   assert.ok(bridge.status(dir).running, 'the original bridge is running again');
 });
 
+testMa3('Update API from Console rebuilds the list from GetApiDescriptor (grandMA3)', async () => {
+  const r = await vscode.commands.executeCommand('ma3.updateApiFromConsole');
+  assert.ok(r && r.api, 'API read');
+  assert.ok(r.api.global.length > 150 && r.api.object.length > 120, `${r.api.global.length} global, ${r.api.object.length} object`);
+  for (const k of ['added', 'removed', 'changed']) assert.ok(Array.isArray(r.diff[k]), `diff.${k}`);
+  assert.ok(r.api.global.some((f) => f.name === 'Printf') && r.api.object.some((f) => f.name === 'Children'));
+});
+
+tests.push({
+  name: 'Check grandMA2 API List Against Console walks gma and compares it (grandMA2 bridge)',
+  needs: () => up(bridgeLib.defaultBridgeDirMa2()),
+  why: 'grandMA2 onPC LuaBridge_MA2 not running',
+  fn: async () => {
+    const r = await vscode.commands.executeCommand('ma3.checkMa2Api');
+    assert.ok(r && r.walk.functions.length > 20, `walk found ${r && r.walk.functions.length} gma functions`);
+    for (const must of ['gma.cmd', 'gma.feedback', 'gma.show.getobj.handle', 'gma.user.getvar']) assert.ok(r.walk.functions.includes(must), `${must} exists on the console`);
+    assert.ok(Array.isArray(r.gaps.missing) && Array.isArray(r.gaps.notOnConsole));
+  },
+});
+
+test('Export Plugin to USB Stick copies a grandMA3 and a grandMA2 plugin into the right folders', async () => {
+  const stick = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ui-stick-'));
+  fs.mkdirSync(path.join(stick, 'grandMA3', 'gma3_library'), { recursive: true }); // as the console formats a stick
+  try {
+    await vscode.commands.executeCommand('ma3.newPlugin', 'UiUsb3');
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(path.join(ws, 'UiUsb3', 'UiUsb3.lua')));
+    const r3 = await vscode.commands.executeCommand('ma3.exportToUsb', { root: stick, yes: true });
+    const dest3 = path.join(stick, 'grandMA3', 'gma3_library', 'datapools', 'plugins');
+    assert.strictEqual(r3.dest, dest3);
+    for (const f of ['UiUsb3.lua', 'UiUsb3.xml']) assert.ok(fs.existsSync(path.join(dest3, f)), `${f} on the stick`);
+
+    await vscode.commands.executeCommand('ma3.newPluginMa2', 'UiUsb2');
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(path.join(ws, 'UiUsb2', 'UiUsb2.lua')));
+    const r2 = await vscode.commands.executeCommand('ma3.exportToUsb', { root: stick, yes: true });
+    assert.strictEqual(r2.dest, path.join(stick, 'gma2', 'plugins'));
+    assert.ok(fs.existsSync(path.join(stick, 'gma2', 'plugins', 'UiUsb2.xml')));
+  } finally {
+    fs.rmSync(stick, { recursive: true, force: true });
+  }
+});
+
 test('quick fixes: replace a misspelt function, add local, and add a yield to a blocking loop', async () => {
   const { doc } = await openLua('fixes.lua', 'printf("x")\nwhile true do\n  local a = 1\nend\nlater = 1\nreturn 1\n');
   await vscode.workspace.getConfiguration('ma3').update('lint.globals', true, vscode.ConfigurationTarget.Global);
