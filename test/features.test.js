@@ -40,3 +40,16 @@ test('object tree: listLua builds an index path and parseList decodes the bridge
   });
   assert.deepStrictEqual(parseList([]), { total: 0, items: [] });
 });
+
+test('manifest schema: context and problems', () => {
+  const { contextAt, schemaProblems } = require('../lib/manifestSchema');
+  const doc = '<GMA3 DataVersion="2.0.0.0">\n\t<Plugin Name="X" Version="0.1.0">\n\t\t';
+  assert.deepStrictEqual(contextAt(doc + '<Comp'), { kind: 'element', parent: 'Plugin', partial: 'Comp' });
+  assert.deepStrictEqual(contextAt(doc + '<ComponentLua Name="a" Fi'), { kind: 'attribute', element: 'ComponentLua', used: ['Name'], partial: 'Fi' });
+  assert.deepStrictEqual(contextAt('<GMA3 DataVersion="2.'), { kind: 'value', element: 'GMA3', attr: 'DataVersion', partial: '2.' });
+  assert.strictEqual(contextAt('<GMA3 DataVersion="1">').kind, 'text');
+  const good = '<?xml version="1.0"?>\n<GMA3 DataVersion="2.0.0.0">\n<Plugin Name="X" Version="0.1.0">\n<ComponentLua Name="X" FileName="X.lua" />\n</Plugin>\n</GMA3>';
+  assert.deepStrictEqual(schemaProblems(good), []);
+  const bad = good.replace('Version="0.1.0"', 'Versoin="1"').replace('<ComponentLua', '<Component').replace('DataVersion="2.0.0.0"', 'DataVersion="2"');
+  assert.deepStrictEqual(schemaProblems(bad).map((p) => p.message.split(' ')[0]), ['DataVersion', 'Unknown', 'Unknown']);
+});
