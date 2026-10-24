@@ -10,6 +10,7 @@ const { checkManifest } = require('./lib/manifest');
 const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
 const { defaultPluginsPath, findManifest, deploy, reloadLua } = require('./lib/deploy');
 const { stringContext, suggestKeywords } = require('./lib/cmdContext');
+const { listLua, parseList } = require('./lib/objectTree');
 const bridge = require('./lib/bridge');
 const { defaultBridgeDir } = bridge;
 
@@ -285,6 +286,57 @@ function activate(context) {
       } catch (err) {
         vscode.window.showErrorMessage(`grandMA3 reset failed: ${err.message}`);
       }
+    })
+  );
+
+  // ---- console object browser (tree of Root() through the bridge)
+  const treeChanged = new vscode.EventEmitter();
+  const luaPath = (p) => `Root()${p.map((i) => `[${i}]`).join('')}`;
+  const objectTree = {
+    onDidChangeTreeData: treeChanged.event,
+    getTreeItem: (el) => el.item,
+    async getChildren(el) {
+      const path = el ? el.path : [];
+      try {
+        const r = await bridge.run(bridgeDir(), listLua(path), cfg().get('bridge.timeout'));
+        if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
+        const { total, items } = parseList(r.returns);
+        const nodes = items.map((c) => {
+          const item = new vscode.TreeItem(c.name, c.count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+          item.description = c.addr;
+          item.tooltip = `${c.name}\n${luaPath(path.concat(c.index))}\n${c.count} child${c.count === 1 ? '' : 'ren'}`;
+          item.contextValue = 'ma3object';
+          return { item, path: path.concat(c.index), addr: c.addr };
+        });
+        const last = items.length ? items[items.length - 1].index : 0;
+        if (last < total) {
+          const item = new vscode.TreeItem(`${total - last} more not shown`);
+          item.description = 'index into it from Lua';
+          nodes.push({ item, path });
+        }
+        return nodes;
+      } catch (err) {
+        return [{ item: new vscode.TreeItem(`${err.message} (refresh to retry)`), path, error: true }];
+      }
+    },
+  };
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('ma3.objects', objectTree),
+    vscode.commands.registerCommand('ma3.objects.refresh', () => treeChanged.fire()),
+    vscode.commands.registerCommand('ma3.objects.copyPath', async (el) => {
+      if (!el || !el.path) return;
+      await vscode.env.clipboard.writeText(luaPath(el.path));
+      vscode.window.setStatusBarMessage(`Copied ${luaPath(el.path)}`, 3000);
+    }),
+    vscode.commands.registerCommand('ma3.objects.copyAddress', async (el) => {
+      if (!el || !el.addr) return;
+      await vscode.env.clipboard.writeText(el.addr);
+      vscode.window.setStatusBarMessage(`Copied ${el.addr}`, 3000);
+    }),
+    vscode.commands.registerCommand('ma3.objects.insertPath', async (el) => {
+      const editor = vscode.window.activeTextEditor;
+      if (!el || !el.path || !editor) return;
+      await editor.edit((b) => b.insert(editor.selection.active, luaPath(el.path)));
     })
   );
 
