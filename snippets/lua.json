@@ -1,0 +1,51 @@
+{
+  "grandMA3 plugin skeleton": {
+    "prefix": "ma3plugin",
+    "body": [
+      "local pluginName = select(1, ...)",
+      "local componentName = select(2, ...)",
+      "local signalTable = select(3, ...)",
+      "local myHandle = select(4, ...)",
+      "",
+      "local function Main(displayHandle)",
+      "\t$0",
+      "end",
+      "",
+      "local function Cleanup()",
+      "end",
+      "",
+      "return Main, Cleanup"
+    ],
+    "description": "grandMA3 plugin entry points"
+  },
+  "Run console command": {
+    "prefix": "cmd",
+    "body": "Cmd(\"${1:Go+ Sequence 1}\")",
+    "description": "Execute a command line command"
+  },
+  "Print to system monitor": {
+    "prefix": "printf",
+    "body": "Printf(\"${1:message}\")",
+    "description": "Write to the system monitor"
+  },
+  "Iterate children": {
+    "prefix": "forchildren",
+    "body": ["for _, ${1:child} in ipairs(${2:obj}:Children()) do", "\t$0", "end"],
+    "description": "Loop over an object's children"
+  },
+  "Protected call": {
+    "prefix": "pcall",
+    "body": [
+      "local ok, err = pcall(function()",
+      "\t$0",
+      "end)",
+      "if not ok then ErrPrintf(\"%s\", tostring(err)) end"
+    ],
+    "description": "Run code without letting an error abort the plugin"
+  },
+  "Yield to the console": {
+    "prefix": "yield",
+    "body": "coroutine.yield(${1:0.1})",
+    "description": "Hand control back to the console for N seconds"
+  }
+}
