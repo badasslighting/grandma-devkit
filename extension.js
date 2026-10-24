@@ -12,6 +12,8 @@ const { luaTemplate, xmlTemplate, ma2LuaTemplate, ma2XmlTemplate, validName } = 
 const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifest, deploy, reloadLua, reloadLuaMa2, reloadCommands, importCollisions } = require('./lib/deploy');
 const { openSession, listen } = require('./lib/telnet');
 const { ma3Stubs, ma2Stubs, mergeLuarc } = require('./lib/stubs');
+const { listRemovableDrives, planExport, exportToStick } = require('./lib/usb');
+const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = require('./lib/liveApi');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget } = require('./lib/target');
@@ -483,6 +485,47 @@ function activate(context) {
         } catch (_) {
           /* unrelated file */
         }
+      }
+    })
+  );
+
+  // ---- copy a plugin onto a USB stick for a hardware console
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.exportToUsb', async (opts = {}) => {
+      const file = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName;
+      const manifest = file && findManifest(file);
+      if (!manifest) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
+      await vscode.workspace.saveAll(false);
+      let root = opts.root || cfg().get('usb.path');
+      if (!root) {
+        const drives = await listRemovableDrives();
+        const picked = await vscode.window.showQuickPick(
+          drives.map((d) => ({ label: d.label, description: d.root, root: d.root })).concat([{ label: 'Choose a folder...', description: 'any folder or drive root', root: '' }]),
+          { placeHolder: drives.length ? 'USB stick to copy the plugin to' : 'No removable drive found; choose a folder' }
+        );
+        if (!picked) return null;
+        root = picked.root;
+        if (!root) {
+          const dir = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, title: 'Stick or folder to copy the plugin to' });
+          if (!dir) return null;
+          root = dir[0].fsPath;
+        }
+      }
+      try {
+        const plan = planExport(manifest, root);
+        if (plan.existing.length && !opts.yes) {
+          const pick = await vscode.window.showWarningMessage(`${plan.existing.join(', ')} already exist in ${plan.dest}. Replace them?`, { modal: true }, 'Replace');
+          if (pick !== 'Replace') return null;
+        }
+        const res = exportToStick(manifest, root);
+        if (res.collisions.length) vscode.window.showWarningMessage(`grandMA2 imports every file starting with "${res.libName}", so ${res.collisions.join(', ')} on the stick creates a duplicate plugin. Remove it from the stick.`);
+        const cmd = res.ma2 ? `Import "${res.libName}" At Plugin 1 /o /nc` : `Import Plugin Library "${res.libName}" At Plugin 1 /nc`;
+        vscode.window.showInformationMessage(`Copied ${res.copied.length} file(s) to ${res.dest}. On the console, plug the stick in and import the plugin.`, 'Copy Import Command').then((pick) => {
+          if (pick === 'Copy Import Command') vscode.env.clipboard.writeText(cmd);
+        });
+        return res;
+      } catch (err) {
+        vscode.window.showErrorMessage(`Export to USB failed: ${err.message}`);
       }
     })
   );
@@ -972,6 +1015,14 @@ function activate(context) {
     }
   }, 4000);
 
+  // Replaces the API list (saved so it survives restarts), and re-checks every open file against it.
+  function applyApi(api) {
+    fs.mkdirSync(context.globalStorageUri.fsPath, { recursive: true });
+    fs.writeFileSync(path.join(context.globalStorageUri.fsPath, 'api.json'), JSON.stringify(api));
+    index = buildIndex(api);
+    vscode.workspace.textDocuments.forEach(refresh);
+  }
+
   // ---- refresh API from a HelpLua dump
   context.subscriptions.push(
     vscode.commands.registerCommand('ma3.importHelpLua', async (fileArg) => {
@@ -987,10 +1038,49 @@ function activate(context) {
       if (!pick) return;
       const api = parseHelpLua(fs.readFileSync(pick[0].fsPath, 'utf8'));
       if (api.global.length === 0) return vscode.window.showErrorMessage('No API functions found in that file.');
-      fs.mkdirSync(context.globalStorageUri.fsPath, { recursive: true });
-      fs.writeFileSync(path.join(context.globalStorageUri.fsPath, 'api.json'), JSON.stringify(api));
-      index = buildIndex(api);
+      applyApi(api);
       vscode.window.showInformationMessage(`Loaded ${api.global.length} global and ${api.object.length} object functions.`);
+    }),
+    // Rebuilds the API list from the running grandMA3 console (GetApiDescriptor), no HelpLua file needed.
+    vscode.commands.registerCommand('ma3.updateApiFromConsole', async () => {
+      const dir = bridgeDirFor('ma3');
+      if (!bridge.status(dir).running) return vscode.window.showWarningMessage('The LuaBridge must be running on the grandMA3 console to read its API.');
+      try {
+        const r = await bridge.run(dir, ma3ApiLua(), 10);
+        if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
+        const api = parseMa3Api(r.returns);
+        if (api.global.length < 50 || api.object.length < 50) throw new Error(`The console returned only ${api.global.length} global and ${api.object.length} object functions.`);
+        const diff = diffApi(index.api, api);
+        applyApi(api);
+        telnetOut.show(true);
+        telnetOut.appendLine(`api: read ${api.global.length} global and ${api.object.length} object functions from the console.`);
+        for (const [label, list] of [['added', diff.added], ['removed', diff.removed], ['changed', diff.changed]]) if (list.length) telnetOut.appendLine(`  ${label}: ${list.join(', ')}`);
+        const regen = fs.existsSync(path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '', '.vscode', 'grandma-stubs', 'grandma3.lua'));
+        if (regen) await setupLanguageServer();
+        vscode.window.showInformationMessage(`API updated from the console: ${api.global.length} global and ${api.object.length} object functions (${diff.added.length} added, ${diff.removed.length} removed, ${diff.changed.length} changed).`);
+        return { api, diff };
+      } catch (err) {
+        vscode.window.showErrorMessage(`API update failed: ${err.message}`);
+      }
+    }),
+    // grandMA2: compares the curated gma.* list with what the console really has.
+    vscode.commands.registerCommand('ma3.checkMa2Api', async () => {
+      const dir = bridgeDirFor('ma2');
+      if (!bridge.status(dir).running) return vscode.window.showWarningMessage('The LuaBridge_MA2 plugin must be running on the grandMA2 console. Use Install LuaBridge on Console.');
+      try {
+        const r = await bridge.run(dir, ma2WalkLua(), 10);
+        if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
+        const walk = parseMa2Walk(r.returns);
+        const gaps = ma2Gaps(walk);
+        telnetOut.show(true);
+        telnetOut.appendLine(`ma2 api: the console has ${walk.functions.length} gma functions; the list has ${walk.functions.length - gaps.missing.length} of them.`);
+        if (gaps.missing.length) telnetOut.appendLine(`  on the console but not in the list: ${gaps.missing.join(', ')}`);
+        if (gaps.notOnConsole.length) telnetOut.appendLine(`  in the list but not on this console: ${gaps.notOnConsole.join(', ')}`);
+        vscode.window.showInformationMessage(`grandMA2 API check: ${gaps.missing.length} functions missing from the list, ${gaps.notOnConsole.length} listed ones absent from this console. Details in the grandMA Console panel.`);
+        return { walk, gaps };
+      } catch (err) {
+        vscode.window.showErrorMessage(`MA2 API check failed: ${err.message}`);
+      }
     })
   );
 }
