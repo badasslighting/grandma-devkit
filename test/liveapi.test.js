@@ -30,11 +30,11 @@ test('diffApi reports added, removed and changed functions, object methods with 
 });
 
 test('the MA2 walk is parsed and compared with the curated list', () => {
-  const walk = parseMa2Walk(['"gma.cmd ;;; gma.echo ;;; gma.network.getprimaryip ;;; gma.sleep @@@@ gma.network ;;; gma.show"']);
-  assert.deepStrictEqual(walk.functions, ['gma.cmd', 'gma.echo', 'gma.network.getprimaryip', 'gma.sleep']);
-  assert.deepStrictEqual(walk.tables, ['gma.network', 'gma.show']);
+  const walk = parseMa2Walk(['"gma.cmd ;;; gma.echo ;;; gma.zzz.newfn ;;; gma.sleep @@@@ gma.zzz ;;; gma.show"']);
+  assert.deepStrictEqual(walk.functions, ['gma.cmd', 'gma.echo', 'gma.zzz.newfn', 'gma.sleep']);
+  assert.deepStrictEqual(walk.tables, ["gma.zzz", "gma.show"]);
   const gaps = ma2Gaps(walk);
-  assert.deepStrictEqual(gaps.missing, ['gma.network.getprimaryip']);
+  assert.deepStrictEqual(gaps.missing, ['gma.zzz.newfn']);
   assert.ok(gaps.notOnConsole.includes('gma.feedback') && !gaps.notOnConsole.includes('gma.cmd'));
-  assert.match(ma2WalkLua(), /walk\(gma, "gma", 0\)/);
+  assert.match(ma2WalkLua(), /mt\.__index[\s\S]*walk\(real, "gma", 0\)/, 'walks the real table behind the bridge proxy');
 });
