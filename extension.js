@@ -5,6 +5,7 @@ const vscode = require('vscode');
 const { parseHelpLua } = require('./lib/helpParser');
 const { snippetFor, hoverMarkdown, buildIndex, activeCall } = require('./lib/apiModel');
 const { findBlockingLoops } = require('./lib/lint');
+const { lintRules } = require('./lib/rules');
 const { checkManifest } = require('./lib/manifest');
 const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
 const { defaultPluginsPath, findManifest, deploy } = require('./lib/deploy');
@@ -106,6 +107,12 @@ function activate(context) {
             vscode.DiagnosticSeverity.Warning
           )
         );
+      }
+      const sev = { warning: vscode.DiagnosticSeverity.Warning, hint: vscode.DiagnosticSeverity.Hint };
+      for (const f of lintRules(doc.getText(), index.api, { globals: cfg().get('lint.globals') })) {
+        const d = new vscode.Diagnostic(lineRange(f.line), f.message, sev[f.severity]);
+        d.code = f.rule;
+        found.push(d);
       }
     } else if (doc.fileName.toLowerCase().endsWith('.xml')) {
       for (const p of checkManifest(doc.getText(), path.dirname(doc.fileName))) {
