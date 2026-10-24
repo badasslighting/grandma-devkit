@@ -12,6 +12,7 @@ const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
 const { defaultPluginsPath, findManifest, deploy, reloadLua } = require('./lib/deploy');
 const { stringContext, suggestKeywords } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
+const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
 const bridge = require('./lib/bridge');
 const { defaultBridgeDir } = bridge;
 
@@ -30,12 +31,41 @@ function activate(context) {
   const diagnostics = vscode.languages.createDiagnosticCollection('ma3');
   context.subscriptions.push(diagnostics);
 
+  // ---- live show contents (cached; refreshed when stale, never when the bridge is down)
+  let showCache = { at: 0, data: null, pending: null };
+  const SHOW_TTL_MS = 60000;
+  function getShow(force) {
+    if (!force && Date.now() - showCache.at < SHOW_TTL_MS) return Promise.resolve(showCache.data);
+    if (showCache.pending) return showCache.pending;
+    const dir = cfg().get('bridge.dir') || defaultBridgeDir();
+    if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return Promise.resolve(showCache.data);
+    showCache.pending = bridge
+      .run(dir, showLua(), cfg().get('bridge.timeout'))
+      .then((r) => {
+        if (r.ok) showCache = { at: Date.now(), data: parseShow(r.returns), pending: null };
+        else showCache.pending = null;
+        return showCache.data;
+      })
+      .catch(() => {
+        showCache.pending = null;
+        return showCache.data;
+      });
+    return showCache.pending;
+  }
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.refreshShow', async () => {
+      const data = await getShow(true);
+      const n = data ? Object.values(data).reduce((a, v) => a + v.length, 0) : 0;
+      vscode.window.showInformationMessage(n ? `Loaded ${n} show objects for completion.` : 'No show data (is the LuaBridge plugin running, and ma3.liveCompletion on?).');
+    })
+  );
+
   // ---- completion: globals everywhere, object methods after ':'
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
       LUA,
       {
-        provideCompletionItems(doc, pos) {
+        async provideCompletionItems(doc, pos) {
           const before = doc.lineAt(pos).text.slice(0, pos.character);
           if (/--/.test(before)) return [];
           const str = stringContext(before);
@@ -43,7 +73,7 @@ function activate(context) {
             if (!str.inCmd) return [];
             const partial = (/[^\s]*$/.exec(str.text) || [''])[0];
             const range = new vscode.Range(pos.line, pos.character - partial.length, pos.line, pos.character);
-            return suggestKeywords(str.text).map((k) => {
+            const items = suggestKeywords(str.text).map((k) => {
               const item = new vscode.CompletionItem(k.name, k.kind === 'modifier' ? vscode.CompletionItemKind.Operator : vscode.CompletionItemKind.Keyword);
               item.detail = k.kind;
               item.documentation = k.doc;
@@ -51,6 +81,16 @@ function activate(context) {
               item.sortText = `${k.rank}${k.name}`;
               return item;
             });
+            // Real object numbers and labels from the running show, when the bridge is up.
+            for (const o of showSuggestions(str.text, await getShow())) {
+              const item = new vscode.CompletionItem(o.no, vscode.CompletionItemKind.Value);
+              item.detail = `${o.kind}: ${o.name}`;
+              item.filterText = `${o.no} ${o.name}`;
+              item.range = range;
+              item.sortText = `0${o.no.padStart(6, '0')}`;
+              items.push(item);
+            }
+            return items;
           }
           const isMethod = /:\s*[A-Za-z_]*$/.test(before);
           const isMember = /\.\s*[A-Za-z_]*$/.test(before);

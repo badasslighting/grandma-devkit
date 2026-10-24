@@ -53,3 +53,14 @@ test('manifest schema: context and problems', () => {
   const bad = good.replace('Version="0.1.0"', 'Versoin="1"').replace('<ComponentLua', '<Component').replace('DataVersion="2.0.0.0"', 'DataVersion="2"');
   assert.deepStrictEqual(schemaProblems(bad).map((p) => p.message.split(' ')[0]), ['DataVersion', 'Unknown', 'Unknown']);
 });
+
+test('show cache: parse the bridge return and suggest objects after a pool keyword', () => {
+  const { parseShow, showSuggestions, showLua } = require('../lib/showCache');
+  const show = parseShow(['"Group|1|Front ;; Group|19|Back|Linear ;; Preset|2.5|Warm"']);
+  assert.deepStrictEqual(show.Group, [{ no: '1', name: 'Front' }, { no: '19', name: 'Back|Linear' }]);
+  assert.deepStrictEqual(showSuggestions('Store group ', show).map((o) => o.no), ['1', '19']);
+  assert.deepStrictEqual(showSuggestions('Preset ', show), [{ kind: 'Preset', no: '2.5', name: 'Warm' }]);
+  assert.deepStrictEqual(showSuggestions('Go+ ', show), []);
+  assert.deepStrictEqual(showSuggestions('Group ', null), []);
+  assert.match(showLua(), /d\.Groups/);
+});
