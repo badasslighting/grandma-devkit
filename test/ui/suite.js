@@ -7,6 +7,17 @@ const vscode = require('vscode');
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
+// Tests that need a console skip (rather than fail) when it isn't running.
+const bridgeLib = require('../../lib/bridge');
+const up = (dir) => {
+  try {
+    return bridgeLib.status(dir).running;
+  } catch (_) {
+    return false;
+  }
+};
+const testMa3 = (name, fn) => tests.push({ name, fn, needs: () => up(bridgeLib.defaultBridgeDir()), why: 'grandMA3 onPC LuaBridge not running' });
+const testMa2 = (name, fn) => tests.push({ name, fn, needs: () => ma2Up(), why: 'grandMA2 onPC Telnet not reachable' });
 const ws = process.env.MA3DEV_UI_WORKSPACE;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -55,7 +66,7 @@ test('0.3 commands are registered', async () => {
   for (const c of ['ma3.deployAndRun', 'ma3.packagePlugin', 'ma3.refreshShow', 'ma3.objects.refresh', 'ma3.objects.copyPath']) assert.ok(cmds.includes(c), `${c} registered`);
 });
 
-test('Cmd strings complete console keywords and live show groups', async () => {
+testMa3('Cmd strings complete console keywords and live show groups', async () => {
   const { doc } = await openLua('cmd.lua', 'Cmd("Store Group ")\n');
   await vscode.commands.executeCommand('ma3.refreshShow');
   const pos = new vscode.Position(0, 17);
@@ -77,7 +88,7 @@ test('lint flags a typo, Cmd in a loop and heavy work in a Timer callback', asyn
   assert.deepStrictEqual(codes, ['cmd-in-loop', 'heavy-in-callback', 'unknown-api']);
 });
 
-test('Enums.* and attribute names complete from the running console', async () => {
+testMa3('Enums.* and attribute names complete from the running console', async () => {
   const { doc } = await openLua('enums.lua', 'local m = Enums.TimerMo\nlocal n = Enums.TimerMode.\nlocal i = GetAttributeIndex("Dim")\n');
   const labels = (list) => list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
   await vscode.commands.executeCommand('ma3.refreshShow');
@@ -98,7 +109,7 @@ test('manifest XML completes elements and attributes', async () => {
   assert.ok(list.items.some((i) => i.label === 'ComponentLua'), 'ComponentLua offered inside Plugin');
 });
 
-test('object browser lists Root children through the bridge', async () => {
+testMa3('object browser lists Root children through the bridge', async () => {
   const bridge = require('../../lib/bridge');
   const { listLua, parseList } = require('../../lib/objectTree');
   const r = await bridge.run(bridge.defaultBridgeDir(), listLua([]), 2);
@@ -153,20 +164,54 @@ test('grandMA2: New grandMA2 Plugin writes a manifest and Lua that pass the chec
   assert.deepStrictEqual(vscode.languages.getDiagnostics(mdoc.uri), []);
 });
 
+// Live grandMA2 onPC tests: need Telnet enabled and a user profile named Devkit without a password.
+const ma2Up = () => {
+  try {
+    const net = require('net');
+    return new Promise((resolve) => {
+      const s = net.connect({ host: '127.0.0.1', port: 30000 });
+      s.once('connect', () => (s.destroy(), resolve(true)));
+      s.once('error', () => resolve(false));
+    });
+  } catch (_) {
+    return Promise.resolve(false);
+  }
+};
+
+testMa2('grandMA2 Telnet: send a command, read the reply and the console error format', async () => {
+  await vscode.workspace.getConfiguration('ma3').update('telnet.user', 'Devkit', vscode.ConfigurationTarget.Global);
+  const ok = await vscode.commands.executeCommand('ma3.telnet.send', 'List Plugin');
+  assert.ok(ok && ok[0].lines.some((l) => /^Plugin\s+1\b/.test(l)), `List Plugin reply: ${JSON.stringify(ok)}`);
+  assert.deepStrictEqual(ok[0].errors, []);
+  const bad = await vscode.commands.executeCommand('ma3.telnet.send', 'NotACommand');
+  assert.deepStrictEqual(bad[0].errors, [{ code: 1, message: 'UNKNOWN COMMAND' }]);
+});
+
+testMa2('grandMA2 Telnet: Install LuaBridge copies the plugin, imports it, and the bridge answers', async () => {
+  const started = await vscode.commands.executeCommand('ma3.installBridge', { target: 'ma2', slot: 99 });
+  assert.strictEqual(started, true, 'bridge heartbeat after install');
+  const { doc } = await openLua('ma2run.lua', 'return gma.show.getvar("VERSION")\n');
+  await vscode.commands.executeCommand('ma3.runOnConsole');
+  const text = await until(() => (/returns: .*3\.\d+/.test(outputText()) ? outputText() : ''), 'ma2 run output with the version', 15000);
+  assert.match(text, /returns: .*3\.\d+/);
+  assert.deepStrictEqual(runDiags(doc), []);
+});
+
 test('contributed settings have the declared defaults', async () => {
   const cfg = vscode.workspace.getConfiguration('ma3');
   assert.strictEqual(cfg.get('bridge.timeout'), 2);
   assert.strictEqual(cfg.get('bridge.dir'), '');
 });
 
-test('LuaBridge Status reports the live heartbeat', async () => {
+testMa3('LuaBridge Status reports the live heartbeat', async () => {
+  await openLua('st3.lua', 'return 1'); // a grandMA3 file, so Status checks the grandMA3 bridge
   popups.length = 0;
   await vscode.commands.executeCommand('ma3.bridgeStatus');
   await until(() => popups.length, 'status popup');
   assert.match(popups[0][1], /LuaBridge running/, popups[0][1]);
 });
 
-test('Run File on Console prints returns and output, no error markers', async () => {
+testMa3('Run File on Console prints returns and output, no error markers', async () => {
   const { doc } = await openLua('ok.lua', 'Printf("ui-test-hello")\nreturn 6*7\n');
   await vscode.commands.executeCommand('ma3.runOnConsole');
   const text = await until(() => (/cpu_ms/.test(outputText()) ? outputText() : ''), 'output channel text');
@@ -175,7 +220,7 @@ test('Run File on Console prints returns and output, no error markers', async ()
   assert.strictEqual(runDiags(doc).length, 0);
 });
 
-test('Run File on Console marks the failing line', async () => {
+testMa3('Run File on Console marks the failing line', async () => {
   const { doc } = await openLua('bad.lua', 'local a = 1\nlocal b = nil\nreturn b.x\n');
   await vscode.commands.executeCommand('ma3.runOnConsole');
   const diags = await until(() => (runDiags(doc).length ? runDiags(doc) : null), 'error diagnostic');
@@ -184,7 +229,7 @@ test('Run File on Console marks the failing line', async () => {
   await until(() => /error: bridge:3:/.test(outputText()), 'error text in output channel');
 });
 
-test('Run Selection offsets the error line and runs only the selection', async () => {
+testMa3('Run Selection offsets the error line and runs only the selection', async () => {
   const { doc, editor } = await openLua('sel.lua', 'error("outside selection")\nlocal x = 1\nlocal y = nil\nreturn y.z\n');
   editor.selection = new vscode.Selection(1, 0, 3, 10);
   await vscode.commands.executeCommand('ma3.runOnConsole');
@@ -193,7 +238,7 @@ test('Run Selection offsets the error line and runs only the selection', async (
   assert.doesNotMatch(diags[0].message, /outside selection/);
 });
 
-test('A clean re-run clears the earlier error marker', async () => {
+testMa3('A clean re-run clears the earlier error marker', async () => {
   const { doc, editor } = await openLua('fix.lua', 'return nil + 1\n');
   await vscode.commands.executeCommand('ma3.runOnConsole');
   await until(() => runDiags(doc).length, 'error diagnostic');
@@ -202,7 +247,7 @@ test('A clean re-run clears the earlier error marker', async () => {
   await until(() => runDiags(doc).length === 0, 'diagnostic cleared');
 });
 
-test('Clear Globals drops a global set by an earlier run', async () => {
+testMa3('Clear Globals drops a global set by an earlier run', async () => {
   await openLua('g1.lua', 'UI_TEST_GLOBAL = 99\nreturn UI_TEST_GLOBAL\n');
   await vscode.commands.executeCommand('ma3.runOnConsole');
   await until(() => /returns: 99/.test(outputText()), 'first run');
@@ -270,6 +315,10 @@ async function run() {
   }
   const results = [];
   for (const t of tests) {
+    if (t.needs && !(await t.needs())) {
+      results.push({ name: t.name, ok: true, skipped: t.why });
+      continue;
+    }
     try {
       await t.fn();
       results.push({ name: t.name, ok: true });

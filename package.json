@@ -40,6 +40,12 @@
       { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA" },
       { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA" },
       { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
+      { "command": "ma3.telnet.send", "title": "Send Command to Console (Telnet)", "category": "grandMA" },
+      { "command": "ma3.telnet.sendSelection", "title": "Send Selected Lines to Console as Commands (Telnet)", "category": "grandMA" },
+      { "command": "ma3.telnet.setPassword", "title": "Set Telnet Password", "category": "grandMA" },
+      { "command": "ma3.telnet.monitor", "title": "Start Console Monitor (Telnet)", "category": "grandMA" },
+      { "command": "ma3.telnet.stopMonitor", "title": "Stop Console Monitor", "category": "grandMA" },
+      { "command": "ma3.installBridge", "title": "Install LuaBridge on Console", "category": "grandMA" },
       { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA" },
       { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA" },
       { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA" }
@@ -67,6 +73,44 @@
           "enum": ["auto", "ma3", "ma2"],
           "default": "auto",
           "markdownDescription": "Which console a Lua file is written for. `auto` picks grandMA2 when the code calls `gma.*` or the plugin's manifest is a grandMA2 one (`<MA ...>`), and grandMA3 otherwise."
+        },
+        "ma3.telnet.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host of the console's Telnet command line (grandMA2). Telnet (the remote command line) must be enabled on the console."
+        },
+        "ma3.telnet.port": {
+          "type": "number",
+          "default": 30000,
+          "description": "Telnet command-line port."
+        },
+        "ma3.telnet.monitorPort": {
+          "type": "number",
+          "default": 30001,
+          "description": "Telnet System Monitor port (Lua runtime errors and console messages)."
+        },
+        "ma3.telnet.user": {
+          "type": "string",
+          "default": "administrator",
+          "description": "User profile to log in as over Telnet, for example a dedicated testing user. Many profiles have no password; if yours does, use Set Telnet Password (kept in VS Code's secret storage, never in settings)."
+        },
+        "ma3.telnet.gapMs": {
+          "type": "number",
+          "default": 400,
+          "minimum": 100,
+          "description": "Pause between Telnet commands in milliseconds; the console drops lines when they arrive faster."
+        },
+        "ma3.deployAndRun.via": {
+          "type": "string",
+          "enum": ["auto", "bridge", "telnet"],
+          "default": "auto",
+          "markdownDescription": "How **Deploy and Reload on Console** reaches grandMA2: `auto` uses the LuaBridge when it is running and Telnet otherwise."
+        },
+        "ma3.bridge.slot": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Plugin pool slot **Install LuaBridge on Console** suggests for LuaBridge_MA2 (0 means 99)."
         },
         "ma3.ma2.pluginsPath": {
           "type": "string",

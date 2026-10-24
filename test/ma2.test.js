@@ -119,3 +119,19 @@ test('a grandMA2 export that is not a plugin gets no manifest warnings', () => {
   const macro = '<?xml version="1.0"?>\n<MA xmlns="http://schemas.malighting.de/grandma2/xml/MA" major_vers="3" minor_vers="9" stream_vers="61">\n<Macro index="0" name="M"><Macroline index="0"><text>Go+</text></Macroline></Macro>\n</MA>\n';
   assert.deepStrictEqual(checkManifest(macro, '/d'), []);
 });
+
+test('importCollisions: only extra XML files that share the plugin name prefix count', () => {
+  const { importCollisions } = require('../lib/deploy');
+  const fsApi = { readdirSync: () => ['LuaBridge_MA2.lua', 'LuaBridge_MA2.lua.backup-1', 'LuaBridge_MA2.xml', 'LuaBridge_MA2.xml.backup-1', 'LuaBridge_MA2_old.xml', 'Probe', 'Probe.xml', 'Other.xml'] };
+  assert.deepStrictEqual(importCollisions('/d', 'LuaBridge_MA2', fsApi), ['LuaBridge_MA2.xml.backup-1', 'LuaBridge_MA2_old.xml']);
+  assert.deepStrictEqual(importCollisions('/d', 'Probe', fsApi), []);
+  assert.deepStrictEqual(importCollisions('/missing', 'X', { readdirSync: () => { throw new Error('nope'); } }), []);
+});
+
+test('reloadCommands gives the right commands per console and refuses a bad slot or name tricks', () => {
+  const { reloadCommands } = require('../lib/deploy');
+  assert.deepStrictEqual(reloadCommands('ma2', 'P', 5), ['Import "P" At Plugin 5 /o /nc', 'Plugin "P"']);
+  assert.deepStrictEqual(reloadCommands('ma3', 'P', 5), ['Import Plugin Library "P" At Plugin 5 /nc', 'Call Plugin 5']);
+  assert.deepStrictEqual(reloadCommands('ma2', 'P"\nDelete Plugin 1', 5), ['Import "PDelete Plugin 1" At Plugin 5 /o /nc', 'Plugin "PDelete Plugin 1"']);
+  assert.throws(() => reloadCommands('ma2', 'P', '5; Delete'), /number/);
+});
