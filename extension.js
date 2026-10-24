@@ -8,7 +8,8 @@ const { findBlockingLoops } = require('./lib/lint');
 const { lintRules } = require('./lib/rules');
 const { checkManifest } = require('./lib/manifest');
 const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
-const { defaultPluginsPath, findManifest, deploy } = require('./lib/deploy');
+const { defaultPluginsPath, findManifest, deploy, reloadLua } = require('./lib/deploy');
+const { stringContext, suggestKeywords } = require('./lib/cmdContext');
 const bridge = require('./lib/bridge');
 const { defaultBridgeDir } = bridge;
 
@@ -35,6 +36,20 @@ function activate(context) {
         provideCompletionItems(doc, pos) {
           const before = doc.lineAt(pos).text.slice(0, pos.character);
           if (/--/.test(before)) return [];
+          const str = stringContext(before);
+          if (str) {
+            if (!str.inCmd) return [];
+            const partial = (/[^\s]*$/.exec(str.text) || [''])[0];
+            const range = new vscode.Range(pos.line, pos.character - partial.length, pos.line, pos.character);
+            return suggestKeywords(str.text).map((k) => {
+              const item = new vscode.CompletionItem(k.name, k.kind === 'modifier' ? vscode.CompletionItemKind.Operator : vscode.CompletionItemKind.Keyword);
+              item.detail = k.kind;
+              item.documentation = k.doc;
+              item.range = range;
+              item.sortText = `${k.rank}${k.name}`;
+              return item;
+            });
+          }
           const isMethod = /:\s*[A-Za-z_]*$/.test(before);
           const isMember = /\.\s*[A-Za-z_]*$/.test(before);
           if (isMember) return [];
@@ -139,11 +154,31 @@ function activate(context) {
       const msg = `Deployed ${copied.length} file(s) to ${path.dirname(copied[0])}`;
       if (quiet) vscode.window.setStatusBarMessage(msg, 3000);
       else vscode.window.showInformationMessage(msg);
+      return manifest;
     } catch (err) {
       vscode.window.showErrorMessage(`grandMA3 deploy failed: ${err.message}`);
+      return null;
     }
   }
   context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.deployAndRun', async () => {
+      const file = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName;
+      if (!file) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
+      await vscode.workspace.saveAll(false);
+      const manifest = deployFile(file, true);
+      if (!manifest) return;
+      const slot = cfg().get('deployAndRun.slot');
+      if (!slot) return vscode.window.showInformationMessage('Deployed. Set ma3.deployAndRun.slot to also re-import and start the plugin on the console.');
+      output.show(true);
+      output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}`);
+      try {
+        const r = await bridge.run(bridgeDir(), reloadLua(path.basename(manifest, path.extname(manifest)), slot), cfg().get('bridge.timeout'));
+        output.appendLine(bridge.formatResult(r));
+      } catch (err) {
+        output.appendLine(`bridge error: ${err.message}`);
+        vscode.window.showErrorMessage(`grandMA3 reload failed: ${err.message}`);
+      }
+    }),
     vscode.commands.registerCommand('ma3.deploy', (uri) => {
       const file = (uri && uri.fsPath) || (vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName);
       if (!file) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
