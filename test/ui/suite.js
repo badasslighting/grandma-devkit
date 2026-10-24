@@ -135,7 +135,36 @@ test('Run on a non-Lua editor warns instead of running', async () => {
   assert.strictEqual(popups[0][0], 'showWarningMessage');
 });
 
+// Visual mode: stage a state, ask the launcher (CDP) for a screenshot, wait for it.
+async function visual() {
+  const dir = process.env.MA3DEV_UI_SHOTS;
+  const shot = async (name) => {
+    await sleep(700);
+    fs.writeFileSync(path.join(dir, name + '.ready'), '');
+    await until(() => fs.existsSync(path.join(dir, name + '.done')), 'screenshot ' + name, 15000);
+  };
+  await vscode.extensions.getExtension('badasslighting.ma3dev').activate();
+  await openLua('ok.lua', 'Printf("ui-test-hello")\nreturn 6*7\n');
+  await vscode.commands.executeCommand('ma3.runOnConsole');
+  await until(() => /cpu_ms/.test(outputText()), 'output');
+  await shot('1-run-ok');
+  const { doc } = await openLua('bad.lua', 'local a = 1\nlocal b = nil\nreturn b.x\n');
+  await vscode.commands.executeCommand('ma3.runOnConsole');
+  await until(() => runDiags(doc).length, 'error marker');
+  await shot('2-run-error-output');
+  await vscode.commands.executeCommand('workbench.actions.view.problems');
+  await shot('3-run-error-problems');
+  await vscode.commands.executeCommand('editor.action.marker.next');
+  await vscode.commands.executeCommand('workbench.action.closePanel');
+  await shot('4-run-error-hover');
+}
+
 async function run() {
+  if (process.env.MA3DEV_UI_SHOTS) {
+    try { await visual(); } catch (e) { fs.writeFileSync(path.join(process.env.MA3DEV_UI_SHOTS, 'error.txt'), String(e && e.message)); }
+    fs.writeFileSync(process.env.MA3DEV_UI_RESULT, JSON.stringify({ tests: [] }));
+    return;
+  }
   const results = [];
   for (const t of tests) {
     try {
