@@ -38,6 +38,7 @@
       { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA3" },
       { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA3" },
       { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA3" },
+      { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA3" },
       { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA3" },
       { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA3" }
     ],
@@ -90,6 +91,11 @@
           "default": 2,
           "minimum": 0.1,
           "markdownDescription": "Seconds of CPU time a run may use before the bridge stops it. The console UI is frozen for that long, and time spent in `coroutine.yield` counts."
+        },
+        "ma3.liveCompletion": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Inside `Cmd(\"...\")` strings, complete group, sequence, macro, preset and similar numbers with the labels from the show running in onPC, through the LuaBridge plugin. The lookup takes a few milliseconds of console time, at most once a minute, and only while the bridge is running."
         },
         "ma3.lint.globals": {
           "type": "boolean",
