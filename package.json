@@ -30,6 +30,7 @@
     "commands": [
       { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA3" },
       { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA3" },
+      { "command": "ma3.packagePlugin", "title": "Bump Version and Package Plugin (zip)", "category": "grandMA3" },
       { "command": "ma3.deployAndRun", "title": "Deploy and Reload on Console", "category": "grandMA3" },
       { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA3" },
       { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA3" },
