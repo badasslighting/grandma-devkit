@@ -111,8 +111,8 @@ test('ma2 lint: unknown gma function, no-argument call, gma.cmd in a loop; MA3 r
 test('blocking loops accept gma.sleep as a yield, and gma.cmd strings complete as commands', () => {
   assert.strictEqual(findBlockingLoops('while true do\n  gma.sleep(1)\nend').length, 0);
   assert.strictEqual(findBlockingLoops('while true do\n  x = x + 1\nend').length, 1);
-  assert.deepStrictEqual(stringContext('gma.cmd("Go+ Exec'), { inCmd: true, text: 'Go+ Exec' });
-  assert.deepStrictEqual(stringContext('gma.feedback("Go'), { inCmd: false, text: 'Go' });
+  assert.deepStrictEqual(stringContext('gma.cmd("Go+ Exec'), { inCmd: true, text: 'Go+ Exec', quote: '"', call: 'gma.cmd' });
+  assert.deepStrictEqual(stringContext('gma.feedback("Go'), { inCmd: false, text: 'Go', quote: '"', call: 'gma.feedback' });
 });
 
 test('a grandMA2 export that is not a plugin gets no manifest warnings', () => {
