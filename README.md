@@ -18,6 +18,7 @@ Lua language features (syntax, linting) come from the bundled `sumneko.lua` pack
 
 ```
 npm test           # unit tests
+npm run test:ui    # drive the commands in a real VS Code (needs the LuaBridge plugin running on onPC)
 npm run build-api  # rebuild data/api.json from the local HelpLua file
 npm run package    # build the .vsix
 ```

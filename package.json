@@ -16,6 +16,7 @@
   "extensionPack": ["sumneko.lua"],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
+    "test:ui": "node test/ui/runTest.js",
     "build-api": "node scripts/build-api.js",
     "package": "npx @vscode/vsce package"
   },
