@@ -1,0 +1,62 @@
+{
+  "name": "ma3-plugin-dev",
+  "displayName": "grandMA3 Plugin Dev",
+  "description": "Write grandMA3 Lua plugins: API completion, hover and signature help, plugin scaffolding, one-command deploy, manifest and blocking-loop checks.",
+  "version": "0.1.0",
+  "publisher": "badasslighting",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/badasslighting/ma3-plugin-dev.git" },
+  "bugs": { "url": "https://github.com/badasslighting/ma3-plugin-dev/issues" },
+  "homepage": "https://github.com/badasslighting/ma3-plugin-dev#readme",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages", "Snippets", "Linters"],
+  "keywords": ["grandMA3", "MA3", "lua", "lighting", "plugin"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:lua", "workspaceContains:**/*.lua"],
+  "extensionPack": ["sumneko.lua"],
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build-api": "node scripts/build-api.js",
+    "package": "npx @vscode/vsce package"
+  },
+  "contributes": {
+    "languages": [{ "id": "lua", "extensions": [".lua"], "aliases": ["Lua"] }],
+    "snippets": [{ "language": "lua", "path": "./snippets/lua.json" }],
+    "commands": [
+      { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA3" },
+      { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA3" },
+      { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA3" },
+      { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA3" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "ma3.deploy", "when": "resourceExtname == .lua || resourceExtname == .xml", "group": "ma3" }
+      ]
+    },
+    "configuration": {
+      "title": "grandMA3 Plugin Dev",
+      "properties": {
+        "ma3.pluginsPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Folder the console loads plugin files from. Empty uses `%ProgramData%/MALightingTechnology/gma3_library/datapools/plugins` on Windows; set it on other systems or for a USB stick."
+        },
+        "ma3.deployOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Copy a plugin's files to the plugins folder whenever one of its .lua or .xml files is saved."
+        },
+        "ma3.dataVersion": {
+          "type": "string",
+          "default": "2.0.0.0",
+          "description": "DataVersion written into new plugin XML manifests."
+        },
+        "ma3.diagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check plugin manifests and flag loops that never yield."
+        }
+      }
+    }
+  }
+}
