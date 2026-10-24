@@ -8,6 +8,8 @@ const { findBlockingLoops } = require('./lib/lint');
 const { checkManifest } = require('./lib/manifest');
 const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
 const { defaultPluginsPath, findManifest, deploy } = require('./lib/deploy');
+const bridge = require('./lib/bridge');
+const { defaultBridgeDir } = bridge;
 
 const LUA = { language: 'lua' };
 const cfg = () => vscode.workspace.getConfiguration('ma3');
@@ -198,6 +200,49 @@ function activate(context) {
       // The Library form creates a real plugin; plain `Import "x" At Plugin` makes an empty UserPlugin.
       await vscode.env.clipboard.writeText(`Import Plugin Library "${lib}" At Plugin ${slot} /nc`);
       vscode.window.showInformationMessage('Import command copied. Paste it into the console command line.');
+    })
+  );
+
+  // ---- run on console through the LuaBridge plugin
+  const output = vscode.window.createOutputChannel('grandMA3');
+  const runDiagnostics = vscode.languages.createDiagnosticCollection('ma3-run');
+  context.subscriptions.push(output, runDiagnostics);
+  const bridgeDir = () => cfg().get('bridge.dir') || defaultBridgeDir();
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.runOnConsole', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== 'lua') return vscode.window.showWarningMessage('Open a Lua file first.');
+      const sel = editor.selection;
+      const code = sel.isEmpty ? editor.document.getText() : editor.document.getText(sel);
+      const offset = sel.isEmpty ? 0 : sel.start.line;
+      runDiagnostics.delete(editor.document.uri);
+      output.show(true);
+      output.appendLine(`> run ${path.basename(editor.document.fileName)}${sel.isEmpty ? '' : ` (lines ${sel.start.line + 1}-${sel.end.line + 1})`}`);
+      try {
+        const r = await bridge.run(bridgeDir(), code, cfg().get('bridge.timeout'));
+        output.appendLine(bridge.formatResult(r));
+        const line = r.ok ? null : bridge.errorLine(r.error, offset);
+        if (line !== null) {
+          const range = editor.document.lineAt(Math.min(line, editor.document.lineCount - 1)).range;
+          runDiagnostics.set(editor.document.uri, [new vscode.Diagnostic(range, String(r.error).split('\n')[0], vscode.DiagnosticSeverity.Error)]);
+        }
+      } catch (err) {
+        output.appendLine(`bridge error: ${err.message}`);
+        vscode.window.showErrorMessage(`grandMA3 run failed: ${err.message}`);
+      }
+    }),
+    vscode.commands.registerCommand('ma3.bridgeStatus', () => {
+      const st = bridge.status(bridgeDir());
+      vscode.window.showInformationMessage(st.running ? `LuaBridge running (heartbeat ${st.ageS}s ago).` : `LuaBridge not running. ${st.reason || `Last heartbeat ${st.ageS}s ago.`}`);
+    }),
+    vscode.commands.registerCommand('ma3.bridgeReset', async () => {
+      try {
+        await bridge.reset(bridgeDir());
+        vscode.window.setStatusBarMessage('LuaBridge globals cleared', 3000);
+      } catch (err) {
+        vscode.window.showErrorMessage(`grandMA3 reset failed: ${err.message}`);
+      }
     })
   );
 
