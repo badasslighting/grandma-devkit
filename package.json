@@ -5,6 +5,7 @@
   "version": "0.2.0",
   "publisher": "badasslighting",
   "license": "MIT",
+  "icon": "images/icon.png",
   "repository": { "type": "git", "url": "https://github.com/badasslighting/ma3dev-for-vscode.git" },
   "bugs": { "url": "https://github.com/badasslighting/ma3dev-for-vscode/issues" },
   "homepage": "https://github.com/badasslighting/ma3dev-for-vscode#readme",
