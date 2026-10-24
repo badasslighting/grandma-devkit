@@ -1,8 +1,8 @@
 {
-  "name": "ma3dev",
-  "displayName": "MA3dev for VScode",
-  "description": "Write grandMA3 Lua plugins: API completion, hover and signature help, plugin scaffolding, one-command deploy, manifest and blocking-loop checks.",
-  "version": "0.3.1",
+  "name": "grandma-devkit",
+  "displayName": "Devkit for Grand MA2+MA3",
+  "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
+  "version": "0.4.0",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -11,7 +11,7 @@
   "homepage": "https://github.com/badasslighting/ma3dev-for-vscode#readme",
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Programming Languages", "Snippets", "Linters"],
-  "keywords": ["grandMA3", "MA3", "lua", "lighting", "plugin"],
+  "keywords": ["grandMA3", "grandMA2", "MA3", "MA2", "gma", "lua", "lighting", "plugin"],
   "main": "./extension.js",
   "activationEvents": ["onLanguage:lua", "workspaceContains:**/*.lua"],
   "extensionPack": ["sumneko.lua"],
@@ -28,21 +28,21 @@
       "[lua]": { "editor.quickSuggestions": { "other": true, "comments": false, "strings": true } }
     },
     "commands": [
-      { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA3" },
-      { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA3" },
-      { "command": "ma3.newPluginMa2", "title": "New grandMA2 Plugin", "category": "grandMA3" },
-      { "command": "ma3.packagePlugin", "title": "Bump Version and Package Plugin (zip)", "category": "grandMA3" },
-      { "command": "ma3.deployAndRun", "title": "Deploy and Reload on Console", "category": "grandMA3" },
-      { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA3" },
-      { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA3" },
-      { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA3" },
-      { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA3", "icon": "$(refresh)" },
-      { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA3" },
-      { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA3" },
-      { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA3" },
-      { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA3" },
-      { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA3" },
-      { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA3" }
+      { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA" },
+      { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA" },
+      { "command": "ma3.newPluginMa2", "title": "New grandMA2 Plugin", "category": "grandMA" },
+      { "command": "ma3.packagePlugin", "title": "Bump Version and Package Plugin (zip)", "category": "grandMA" },
+      { "command": "ma3.deployAndRun", "title": "Deploy and Reload on Console", "category": "grandMA" },
+      { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA" },
+      { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA" },
+      { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA" },
+      { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA", "icon": "$(refresh)" },
+      { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA" },
+      { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA" },
+      { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
+      { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA" },
+      { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA" },
+      { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA" }
     ],
     "views": {
       "explorer": [{ "id": "ma3.objects", "name": "grandMA3 Objects" }]
@@ -60,7 +60,7 @@
       ]
     },
     "configuration": {
-      "title": "MA3dev for VScode",
+      "title": "Devkit for Grand MA2+MA3",
       "properties": {
         "ma3.target": {
           "type": "string",

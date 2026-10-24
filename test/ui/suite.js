@@ -30,7 +30,7 @@ async function openLua(name, text) {
 
 const outputText = () =>
   vscode.workspace.textDocuments
-    .filter((d) => d.uri.scheme === 'output' && /grandMA3/i.test(d.uri.path + d.uri.authority + d.uri.query))
+    .filter((d) => d.uri.scheme === 'output' && /grandMA Devkit|grandMA3/i.test(d.uri.path + d.uri.authority + d.uri.query))
     .map((d) => d.getText())
     .join('\n');
 const runDiags = (doc) => vscode.languages.getDiagnostics(doc.uri).filter((d) => d.severity === vscode.DiagnosticSeverity.Error);
@@ -45,7 +45,7 @@ for (const kind of ['showInformationMessage', 'showWarningMessage', 'showErrorMe
 
 test('extension activates and registers the bridge commands', async () => {
   await openLua('a.lua', 'return 1\n');
-  await vscode.extensions.getExtension('badasslighting.ma3dev').activate();
+  await vscode.extensions.getExtension('badasslighting.grandma-devkit').activate();
   const cmds = await vscode.commands.getCommands(true);
   for (const c of ['ma3.runOnConsole', 'ma3.bridgeStatus', 'ma3.bridgeReset']) assert.ok(cmds.includes(c), `${c} registered`);
 });
@@ -246,7 +246,7 @@ async function visual() {
     fs.writeFileSync(path.join(dir, name + '.ready'), '');
     await until(() => fs.existsSync(path.join(dir, name + '.done')), 'screenshot ' + name, 15000);
   };
-  await vscode.extensions.getExtension('badasslighting.ma3dev').activate();
+  await vscode.extensions.getExtension('badasslighting.grandma-devkit').activate();
   await openLua('ok.lua', 'Printf("ui-test-hello")\nreturn 6*7\n');
   await vscode.commands.executeCommand('ma3.runOnConsole');
   await until(() => /cpu_ms/.test(outputText()), 'output');
