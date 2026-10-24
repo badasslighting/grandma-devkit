@@ -13,6 +13,7 @@ const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifes
 const { openSession, listen } = require('./lib/telnet');
 const { ma3Stubs, ma2Stubs, mergeLuarc } = require('./lib/stubs');
 const { pathContext, childrenLua, parseChildren } = require('./lib/objectPath');
+const { buildRunLua, parseResults, discoverTests, errorLine } = require('./lib/luaTests');
 const { listRemovableDrives, planExport, exportToStick } = require('./lib/usb');
 const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = require('./lib/liveApi');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
@@ -1040,6 +1041,131 @@ function activate(context) {
       /* an offer is never worth an error */
     }
   }, 4000);
+
+  // ---- Lua tests (*.test.lua) run on the console through the bridge, shown in the Testing panel
+  async function runLuaTestFile(fsPath) {
+    const open = vscode.workspace.textDocuments.find((d) => d.fileName === fsPath);
+    const text = open ? open.getText() : fs.readFileSync(fsPath, 'utf8');
+    const target = detectTarget(text, cfg().get('target'));
+    const dir = bridgeDirFor(target);
+    if (!bridge.status(dir).running) {
+      return { target, results: [], output: [], error: `The LuaBridge isn't running on the ${target === 'ma2' ? 'grandMA2' : 'grandMA3'} console.` };
+    }
+    const r = await bridge.run(dir, buildRunLua(text), cfg().get('test.timeout'));
+    return { target, results: r.ok ? parseResults(r.returns) : [], output: r.output || [], error: r.ok ? null : String(r.error).split(String.fromCharCode(10))[0] };
+  }
+  const luaTests = vscode.tests.createTestController('grandmaLua', 'grandMA Lua tests');
+  context.subscriptions.push(luaTests);
+  function addTestFile(uri) {
+    let item = luaTests.items.get(uri.toString());
+    if (!item) {
+      item = luaTests.createTestItem(uri.toString(), vscode.workspace.asRelativePath(uri), uri);
+      item.canResolveChildren = true;
+      luaTests.items.add(item);
+    }
+    return item;
+  }
+  async function readTests(item) {
+    let text = '';
+    try {
+      text = (await vscode.workspace.openTextDocument(item.uri)).getText();
+    } catch (_) {
+      return item.children.replace([]);
+    }
+    item.children.replace(
+      discoverTests(text).map((t) => {
+        const child = luaTests.createTestItem(`${item.id}#${t.name}`, t.name, item.uri);
+        child.range = new vscode.Range(t.line, 0, t.line, 0);
+        return child;
+      })
+    );
+  }
+  luaTests.resolveHandler = async (item) => {
+    if (item) return readTests(item);
+    for (const uri of await vscode.workspace.findFiles('**/*.test.lua', '**/node_modules/**')) addTestFile(uri);
+  };
+  const luaWatcher = vscode.workspace.createFileSystemWatcher('**/*.test.lua');
+  context.subscriptions.push(
+    luaWatcher,
+    luaWatcher.onDidCreate((uri) => addTestFile(uri)),
+    luaWatcher.onDidChange((uri) => {
+      const item = luaTests.items.get(uri.toString());
+      if (item) readTests(item);
+    }),
+    luaWatcher.onDidDelete((uri) => luaTests.items.delete(uri.toString()))
+  );
+  luaTests.createRunProfile(
+    'Run on console',
+    vscode.TestRunProfileKind.Run,
+    async (request, token) => {
+      const run = luaTests.createTestRun(request);
+      const files = [];
+      const pick = (item) => (item.parent ? pick(item.parent) : item);
+      if (request.include) request.include.forEach((i) => files.includes(pick(i)) || files.push(pick(i)));
+      else luaTests.items.forEach((i) => files.push(i));
+      for (const file of files) {
+        if (token.isCancellationRequested) break;
+        await readTests(file);
+        file.children.forEach((c) => run.started(c));
+        run.started(file);
+        try {
+          const res = await runLuaTestFile(file.uri.fsPath);
+          for (const line of res.output) run.appendOutput(`${line}\r\n`, undefined, file);
+          if (res.error) {
+            const msg = new vscode.TestMessage(res.error);
+            file.children.forEach((c) => run.errored(c, msg));
+            run.errored(file, msg);
+            continue;
+          }
+          for (const t of res.results) {
+            let child = null;
+            file.children.forEach((c) => c.label === t.name && (child = c));
+            if (!child) {
+              child = luaTests.createTestItem(`${file.id}#${t.name}`, t.name, file.uri);
+              file.children.add(child);
+            }
+            if (t.ok) run.passed(child, t.ms);
+            else {
+              const msg = new vscode.TestMessage(t.error);
+              const line = errorLine(t.error);
+              if (line !== null) msg.location = new vscode.Location(file.uri, new vscode.Position(line, 0));
+              run.failed(child, msg, t.ms);
+            }
+          }
+          file.children.forEach((c) => {
+            if (!res.results.some((t) => t.name === c.label)) run.skipped(c);
+          });
+          run.passed(file);
+        } catch (err) {
+          const msg = new vscode.TestMessage(err.message);
+          file.children.forEach((c) => run.errored(c, msg));
+          run.errored(file, msg);
+        }
+      }
+      run.end();
+    },
+    true
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.runLuaTests', async (fileArg) => {
+      const file = typeof fileArg === 'string' ? fileArg : vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName;
+      if (!file) return vscode.window.showWarningMessage('Open a .test.lua file first.');
+      telnetOut.show(true);
+      telnetOut.appendLine(`> test ${path.basename(file)}`);
+      try {
+        const res = await runLuaTestFile(file);
+        for (const l of res.output) telnetOut.appendLine(`  ${l}`);
+        if (res.error) telnetOut.appendLine(`  error: ${res.error}`);
+        for (const t of res.results) telnetOut.appendLine(`  ${t.ok ? 'pass' : 'FAIL'} ${t.name}${t.ok ? '' : `: ${t.error}`}`);
+        const failed = res.results.filter((t) => !t.ok).length;
+        telnetOut.appendLine(`  ${res.results.length - failed} passed, ${failed} failed`);
+        return res;
+      } catch (err) {
+        telnetOut.appendLine(`  error: ${err.message}`);
+        vscode.window.showErrorMessage(`Lua tests failed to run: ${err.message}`);
+      }
+    })
+  );
 
   // Replaces the API list (saved so it survives restarts), and re-checks every open file against it.
   function applyApi(api) {
