@@ -10,9 +10,9 @@ test('reloadLua imports the library form and calls the slot', () => {
 });
 
 test('stringContext recognises the Cmd string and ignores other strings and comments', () => {
-  assert.deepStrictEqual(stringContext('Cmd("Go+ Exec'), { inCmd: true, text: 'Go+ Exec' });
-  assert.deepStrictEqual(stringContext("CmdIndirect( 'Store "), { inCmd: true, text: 'Store ' });
-  assert.deepStrictEqual(stringContext('Printf("Go'), { inCmd: false, text: 'Go' });
+  assert.deepStrictEqual(stringContext('Cmd("Go+ Exec'), { inCmd: true, text: 'Go+ Exec', quote: '"', call: 'Cmd' });
+  assert.deepStrictEqual(stringContext("CmdIndirect( 'Store "), { inCmd: true, text: 'Store ', quote: "'", call: 'CmdIndirect' });
+  assert.deepStrictEqual(stringContext('Printf("Go'), { inCmd: false, text: 'Go', quote: '"', call: 'Printf' });
   assert.strictEqual(stringContext('Cmd("Go+")'), null);
   assert.strictEqual(stringContext('-- Cmd("Go'), null);
 });
@@ -97,4 +97,22 @@ test('release: zip entries read back with the right names, bytes and crc', () =>
     assert.strictEqual(buf.readUInt32LE(p + 16), crc32(f.data));
     p += 46 + nameLen;
   });
+});
+
+test('live names: contexts, guards and parsers', () => {
+  const l = require('../lib/liveNames');
+  assert.deepStrictEqual(l.enumContext('local m = Enums.Tim'), { kind: 'enums', partial: 'Tim' });
+  assert.deepStrictEqual(l.enumContext('x = Enums.'), { kind: 'enums', partial: '' });
+  assert.deepStrictEqual(l.enumContext('Enums.TimerMode.Co'), { kind: 'members', name: 'TimerMode', partial: 'Co' });
+  assert.strictEqual(l.enumContext('MyEnums.X'), null);
+  assert.throws(() => l.enumMembersLua('x;os.exit()'), /Not an enum name/);
+  assert.match(l.enumMembersLua('YesNo'), /Enums\.YesNo/);
+  assert.deepStrictEqual(l.parseNames(['"A,B,C"']), ['A', 'B', 'C']);
+  assert.deepStrictEqual(l.parseNames(['""']), []);
+  assert.deepStrictEqual(l.parseMembers(['"Countdown=0,Stopwatch=1"']), [{ name: 'Countdown', value: '0' }, { name: 'Stopwatch', value: '1' }]);
+  const sc = require('../lib/cmdContext').stringContext;
+  assert.ok(l.attributeContext(sc('GetAttributeIndex("Di')));
+  assert.ok(l.attributeContext(sc('Cmd("Attribute Di')));
+  assert.ok(!l.attributeContext(sc('Cmd("Go+ Di')));
+  assert.ok(!l.attributeContext(sc('Printf("Attribute Di')));
 });

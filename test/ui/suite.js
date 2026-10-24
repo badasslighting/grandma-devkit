@@ -77,6 +77,18 @@ test('lint flags a typo, Cmd in a loop and heavy work in a Timer callback', asyn
   assert.deepStrictEqual(codes, ['cmd-in-loop', 'heavy-in-callback', 'unknown-api']);
 });
 
+test('Enums.* and attribute names complete from the running console', async () => {
+  const { doc } = await openLua('enums.lua', 'local m = Enums.TimerMo\nlocal n = Enums.TimerMode.\nlocal i = GetAttributeIndex("Dim")\n');
+  const labels = (list) => list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
+  await vscode.commands.executeCommand('ma3.refreshShow');
+  const enums = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 23));
+  assert.ok(labels(enums).includes('TimerMode'), 'enum names offered');
+  const members = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(1, 28));
+  assert.ok(['Countdown', 'Stopwatch'].every((n) => labels(members).includes(n)), 'TimerMode members offered');
+  const attrs = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(2, 30));
+  assert.ok(labels(attrs).includes('Dimmer'), 'attribute names offered inside GetAttributeIndex("...")');
+});
+
 test('manifest XML completes elements and attributes', async () => {
   const file = path.join(ws, 'P.xml');
   fs.writeFileSync(file, '<GMA3 DataVersion="2.0.0.0">\n\t<Plugin Name="P">\n\t\t<\n\t</Plugin>\n</GMA3>\n');

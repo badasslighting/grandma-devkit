@@ -16,6 +16,7 @@ const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
+const { enumNamesLua, enumMembersLua, attributeNamesLua, parseNames, parseMembers, enumContext, attributeContext } = require('./lib/liveNames');
 const bridge = require('./lib/bridge');
 const { defaultBridgeDir, defaultBridgeDirMa2 } = bridge;
 
@@ -88,8 +89,28 @@ function activate(context) {
       });
     return showCache.pending;
   }
+  // Enum and attribute names: static per software version or fixture patch, so cached for ten minutes.
+  const nameCache = new Map();
+  async function liveFetch(key, lua, parse) {
+    const hit = nameCache.get(key);
+    if (hit && Date.now() - hit.at < 600000) return hit.data;
+    const dir = bridgeDirFor('ma3');
+    if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return hit ? hit.data : [];
+    try {
+      const r = await bridge.run(dir, lua, cfg().get('bridge.timeout'));
+      if (r.ok) {
+        const data = parse(r.returns);
+        nameCache.set(key, { at: Date.now(), data });
+        return data;
+      }
+    } catch (_) {
+      /* bridge went away: serve what we had */
+    }
+    return hit ? hit.data : [];
+  }
   context.subscriptions.push(
     vscode.commands.registerCommand('ma3.refreshShow', async () => {
+      nameCache.clear();
       const data = await getShow(true);
       const n = data ? Object.values(data).reduce((a, v) => a + v.length, 0) : 0;
       vscode.window.showInformationMessage(n ? `Loaded ${n} show objects for completion.` : 'No show data (is the LuaBridge plugin running, and ma3.liveCompletion on?).');
@@ -105,6 +126,15 @@ function activate(context) {
           const before = doc.lineAt(pos).text.slice(0, pos.character);
           if (/--/.test(before)) return [];
           const str = stringContext(before);
+          if (str && attributeContext(str) && targetOf(doc) === 'ma3') {
+            const names = (await liveFetch('attributes', attributeNamesLua(), parseNames)).map((n) => {
+              const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.EnumMember);
+              item.detail = 'attribute';
+              return item;
+            });
+            if (!str.inCmd) return names;
+            str.attributes = names;
+          }
           if (str) {
             if (!str.inCmd) return [];
             const partial = (/[^\s]*$/.exec(str.text) || [''])[0];
@@ -127,7 +157,18 @@ function activate(context) {
               item.sortText = `0${o.no.padStart(6, '0')}`;
               items.push(item);
             }
-            return items;
+            return items.concat(str.attributes || []);
+          }
+          const en = enumContext(before);
+          if (en && targetOf(doc) === 'ma3') {
+            if (en.kind === 'enums') {
+              return (await liveFetch('enums', enumNamesLua(), parseNames)).map((n) => new vscode.CompletionItem(n, vscode.CompletionItemKind.Enum));
+            }
+            return (await liveFetch(`enum:${en.name}`, enumMembersLua(en.name), parseMembers)).map((m) => {
+              const item = new vscode.CompletionItem(m.name, vscode.CompletionItemKind.EnumMember);
+              item.detail = `Enums.${en.name}.${m.name} = ${m.value}`;
+              return item;
+            });
           }
           const ma2 = memberContext(before);
           if (ma2) {
