@@ -11,6 +11,7 @@ const { SCHEMA, SCHEMA_MA2, schemaFor, rootOf, isMa2, contextAt, valuesFor } = r
 const { luaTemplate, xmlTemplate, ma2LuaTemplate, ma2XmlTemplate, validName } = require('./lib/templates');
 const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifest, deploy, reloadLua, reloadLuaMa2, reloadCommands, importCollisions } = require('./lib/deploy');
 const { openSession, listen } = require('./lib/telnet');
+const { ma3Stubs, ma2Stubs, mergeLuarc } = require('./lib/stubs');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget } = require('./lib/target');
@@ -877,6 +878,50 @@ function activate(context) {
     }),
     vscode.commands.registerCommand('ma3.osc.disable', () => oscConsole(oscDisableLua, 'Disabling OSC'))
   );
+
+  // ---- definitions for the Lua language server (sumneko.lua): known globals, typed parameters, `Obj:` methods
+  async function setupLanguageServer() {
+    const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (!folder) return vscode.window.showWarningMessage('Open a folder first; the definitions are written into it.');
+    const root = folder.uri.fsPath;
+    const stubsDir = path.join(root, '.vscode', 'grandma-stubs');
+    try {
+      fs.mkdirSync(stubsDir, { recursive: true });
+      fs.writeFileSync(path.join(stubsDir, 'grandma3.lua'), ma3Stubs(index.api));
+      fs.writeFileSync(path.join(stubsDir, 'grandma2.lua'), ma2Stubs());
+      const luarc = path.join(root, '.luarc.json');
+      const merged = mergeLuarc(fs.existsSync(luarc) ? fs.readFileSync(luarc, 'utf8') : '', {
+        libraryDir: './.vscode/grandma-stubs',
+        runtimeVersion: cfg().get('target') === 'ma2' ? 'Lua 5.3' : 'Lua 5.4',
+      });
+      if (merged.error) {
+        vscode.window.showWarningMessage(`Definitions written to .vscode/grandma-stubs. ${merged.error}`);
+        return { stubsDir, luarc: false };
+      }
+      fs.writeFileSync(luarc, merged.text);
+    } catch (err) {
+      return vscode.window.showErrorMessage(`Could not write the definitions: ${err.message}`);
+    }
+    const hasLuaLs = !!vscode.extensions.getExtension('sumneko.lua');
+    vscode.window.showInformationMessage(`Lua definitions for grandMA3 and grandMA2 written to .vscode/grandma-stubs and linked from .luarc.json.${hasLuaLs ? '' : ' Install the Lua language server (sumneko.lua) to use them.'}`);
+    return { stubsDir, luarc: true };
+  }
+  context.subscriptions.push(vscode.commands.registerCommand('ma3.setupLanguageServer', setupLanguageServer));
+  // Offer it once per workspace when the Lua language server is installed and the folder has Lua files.
+  setTimeout(async () => {
+    try {
+      const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+      if (!folder || !vscode.extensions.getExtension('sumneko.lua') || context.workspaceState.get('stubsOffered')) return;
+      const luarc = path.join(folder.uri.fsPath, '.luarc.json');
+      if (fs.existsSync(luarc) && /grandma-stubs/.test(fs.readFileSync(luarc, 'utf8'))) return;
+      if (!(await vscode.workspace.findFiles('**/*.lua', '**/node_modules/**', 1)).length) return;
+      await context.workspaceState.update('stubsOffered', true);
+      const pick = await vscode.window.showInformationMessage('Set up grandMA Lua definitions so Printf, Cmd, Root() and gma.* are known to the Lua language server?', 'Set up', 'Not now');
+      if (pick === 'Set up') await setupLanguageServer();
+    } catch (_) {
+      /* an offer is never worth an error */
+    }
+  }, 4000);
 
   // ---- refresh API from a HelpLua dump
   context.subscriptions.push(

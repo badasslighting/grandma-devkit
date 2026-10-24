@@ -42,6 +42,7 @@
       { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
       { "command": "ma3.telnet.send", "title": "Send Command to Console (Telnet)", "category": "grandMA" },
       { "command": "ma3.telnet.sendSelection", "title": "Send Selected Lines to Console as Commands (Telnet)", "category": "grandMA" },
+      { "command": "ma3.setupLanguageServer", "title": "Set Up Lua Language Server Definitions", "category": "grandMA" },
       { "command": "ma3.osc.send", "title": "Send Command to Console (OSC)", "category": "grandMA" },
       { "command": "ma3.osc.sendSelection", "title": "Send Selected Lines to Console as Commands (OSC)", "category": "grandMA" },
       { "command": "ma3.osc.setup", "title": "Enable OSC Command Input on Console", "category": "grandMA" },
