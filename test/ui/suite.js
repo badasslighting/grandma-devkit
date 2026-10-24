@@ -197,6 +197,43 @@ testMa2('grandMA2 Telnet: Install LuaBridge copies the plugin, imports it, and t
   assert.deepStrictEqual(runDiags(doc), []);
 });
 
+// Deploys a throwaway plugin into the real plugins folder, imports it into a free pool slot and starts it,
+// then removes everything it created. Slot 98 is free in the usual test show.
+testMa3('Deploy and Reload on Console imports and starts a plugin in a pool slot (grandMA3)', async () => {
+  const bridge = require('../../lib/bridge');
+  const { defaultPluginsPath } = require('../../lib/deploy');
+  const dir = bridge.defaultBridgeDir();
+  const run = (code) => bridge.run(dir, code, 5);
+  const slot = 98;
+  const used = await run(`local p = Root().ShowData.DataPools[1].Plugins[${slot}] return p ~= nil and p.name or 'free'`);
+  assert.strictEqual(JSON.parse(used.returns[0]), 'free', `slot ${slot} must be free in the test show (found ${used.returns[0]})`);
+  const config = vscode.workspace.getConfiguration('ma3');
+  await config.update('deployAndRun.slot', slot, vscode.ConfigurationTarget.Global);
+  const folder = defaultPluginsPath();
+  try {
+    await vscode.commands.executeCommand('ma3.newPlugin', 'UiReloadDemo');
+    const luaFile = path.join(ws, 'UiReloadDemo', 'UiReloadDemo.lua');
+    fs.writeFileSync(luaFile, "local function Main()\n  SetVar(GlobalVars(), 'UI_RELOAD_DEMO', 'ran')\nend\nreturn Main\n");
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(luaFile));
+    await vscode.commands.executeCommand('ma3.deployAndRun');
+    const seen = await until(async () => {
+      const r = await run("return tostring((GetVar(GlobalVars(), 'UI_RELOAD_DEMO')))");
+      return /ran/.test(r.returns[0]) ? r.returns[0] : '';
+    }, 'the reloaded plugin to run', 12000);
+    assert.match(seen, /ran/);
+    const named = await run(`return Root().ShowData.DataPools[1].Plugins[${slot}].name`);
+    assert.match(named.returns[0], /UiReloadDemo/);
+  } finally {
+    await config.update('deployAndRun.slot', undefined, vscode.ConfigurationTarget.Global);
+    try {
+      await run(`Cmd('Delete Plugin ${slot} /nc') SetVar(GlobalVars(), 'UI_RELOAD_DEMO', '')`);
+    } catch (_) {
+      /* bridge gone */
+    }
+    for (const ext of ['lua', 'xml']) fs.rmSync(path.join(folder, `UiReloadDemo.${ext}`), { force: true });
+  }
+});
+
 test('contributed settings have the declared defaults', async () => {
   const cfg = vscode.workspace.getConfiguration('ma3');
   assert.strictEqual(cfg.get('bridge.timeout'), 2);
@@ -214,7 +251,8 @@ testMa3('LuaBridge Status reports the live heartbeat', async () => {
 testMa3('Run File on Console prints returns and output, no error markers', async () => {
   const { doc } = await openLua('ok.lua', 'Printf("ui-test-hello")\nreturn 6*7\n');
   await vscode.commands.executeCommand('ma3.runOnConsole');
-  const text = await until(() => (/cpu_ms/.test(outputText()) ? outputText() : ''), 'output channel text');
+  // Wait for this run's own output: the channel also holds earlier runs' cpu_ms lines.
+  const text = await until(() => (/returns: 42/.test(outputText()) ? outputText() : ''), 'output channel text');
   assert.match(text, /ui-test-hello/);
   assert.match(text, /returns: 42/);
   assert.strictEqual(runDiags(doc).length, 0);
