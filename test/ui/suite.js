@@ -297,6 +297,20 @@ testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', as
   assert.ok(bridge.status(dir).running, 'the original bridge is running again');
 });
 
+testMa3('Root().Path. completes children and properties from the console (grandMA3)', async () => {
+  const { doc } = await openLua('paths.lua', 'local a = Root().\nlocal b = Root().ShowData.DataPools[1].\nlocal c = Root().ShowData.\n');
+  const labels = (list) => list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
+  await vscode.commands.executeCommand('ma3.refreshShow');
+  const complete = (line, col) => vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(line, col), '.');
+  const root = labels(await complete(0, 18));
+  assert.ok(root.includes('ShowData'), `Root children: ${root.slice(0, 6)}`);
+  const pools = await complete(1, 40);
+  assert.ok(['Groups', 'Sequences', 'Macros'].every((n) => labels(pools).includes(n)), `DataPools[1] children: ${labels(pools).slice(0, 6)}`);
+  const show = await complete(2, 26);
+  assert.ok(labels(show).includes('DataPools') && labels(show).includes('NAME'), 'children and property names on ShowData');
+  assert.ok(show.items.some((i) => i.detail === 'property') && show.items.some((i) => i.detail === 'child object'));
+});
+
 testMa3('Update API from Console rebuilds the list from GetApiDescriptor (grandMA3)', async () => {
   const r = await vscode.commands.executeCommand('ma3.updateApiFromConsole');
   assert.ok(r && r.api, 'API read');

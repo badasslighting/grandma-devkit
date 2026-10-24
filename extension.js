@@ -12,6 +12,7 @@ const { luaTemplate, xmlTemplate, ma2LuaTemplate, ma2XmlTemplate, validName } = 
 const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifest, deploy, reloadLua, reloadLuaMa2, reloadCommands, importCollisions } = require('./lib/deploy');
 const { openSession, listen } = require('./lib/telnet');
 const { ma3Stubs, ma2Stubs, mergeLuarc } = require('./lib/stubs');
+const { pathContext, childrenLua, parseChildren } = require('./lib/objectPath');
 const { listRemovableDrives, planExport, exportToStick } = require('./lib/usb');
 const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = require('./lib/liveApi');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
@@ -96,9 +97,9 @@ function activate(context) {
   }
   // Enum and attribute names: static per software version or fixture patch, so cached for ten minutes.
   const nameCache = new Map();
-  async function liveFetch(key, lua, parse) {
+  async function liveFetch(key, lua, parse, ttlMs = 600000) {
     const hit = nameCache.get(key);
-    if (hit && Date.now() - hit.at < 600000) return hit.data;
+    if (hit && Date.now() - hit.at < ttlMs) return hit.data;
     const dir = bridgeDirFor('ma3');
     if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return hit ? hit.data : [];
     try {
@@ -174,6 +175,31 @@ function activate(context) {
               item.detail = `Enums.${en.name}.${m.name} = ${m.value}`;
               return item;
             });
+          }
+          const op = pathContext(before);
+          if (op && targetOf(doc) === 'ma3') {
+            // Children and properties of the object a literal Root()... path reaches, from the console.
+            let lua;
+            try {
+              lua = childrenLua(op.segments);
+            } catch (_) {
+              return [];
+            }
+            const found = await liveFetch(`path:${JSON.stringify(op.segments)}`, lua, parseChildren, 30000);
+            const items = [];
+            for (const n of found.children || []) {
+              const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.Module);
+              item.detail = 'child object';
+              item.sortText = `0${n}`;
+              items.push(item);
+            }
+            for (const n of found.properties || []) {
+              const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.Property);
+              item.detail = 'property';
+              item.sortText = `1${n}`;
+              items.push(item);
+            }
+            return items;
           }
           const ma2 = memberContext(before);
           if (ma2) {
