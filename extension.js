@@ -5,9 +5,15 @@ const vscode = require('vscode');
 const { parseHelpLua } = require('./lib/helpParser');
 const { snippetFor, hoverMarkdown, buildIndex, activeCall } = require('./lib/apiModel');
 const { findBlockingLoops } = require('./lib/lint');
+const { lintRules } = require('./lib/rules');
 const { checkManifest } = require('./lib/manifest');
+const { SCHEMA, contextAt, valuesFor } = require('./lib/manifestSchema');
 const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
-const { defaultPluginsPath, findManifest, deploy } = require('./lib/deploy');
+const { defaultPluginsPath, filesForManifest, findManifest, deploy, reloadLua } = require('./lib/deploy');
+const { bumpVersion, zip } = require('./lib/release');
+const { stringContext, suggestKeywords } = require('./lib/cmdContext');
+const { listLua, parseList } = require('./lib/objectTree');
+const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
 const bridge = require('./lib/bridge');
 const { defaultBridgeDir } = bridge;
 
@@ -26,14 +32,67 @@ function activate(context) {
   const diagnostics = vscode.languages.createDiagnosticCollection('ma3');
   context.subscriptions.push(diagnostics);
 
+  // ---- live show contents (cached; refreshed when stale, never when the bridge is down)
+  let showCache = { at: 0, data: null, pending: null };
+  const SHOW_TTL_MS = 60000;
+  function getShow(force) {
+    if (!force && Date.now() - showCache.at < SHOW_TTL_MS) return Promise.resolve(showCache.data);
+    if (showCache.pending) return showCache.pending;
+    const dir = cfg().get('bridge.dir') || defaultBridgeDir();
+    if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return Promise.resolve(showCache.data);
+    showCache.pending = bridge
+      .run(dir, showLua(), cfg().get('bridge.timeout'))
+      .then((r) => {
+        if (r.ok) showCache = { at: Date.now(), data: parseShow(r.returns), pending: null };
+        else showCache.pending = null;
+        return showCache.data;
+      })
+      .catch(() => {
+        showCache.pending = null;
+        return showCache.data;
+      });
+    return showCache.pending;
+  }
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.refreshShow', async () => {
+      const data = await getShow(true);
+      const n = data ? Object.values(data).reduce((a, v) => a + v.length, 0) : 0;
+      vscode.window.showInformationMessage(n ? `Loaded ${n} show objects for completion.` : 'No show data (is the LuaBridge plugin running, and ma3.liveCompletion on?).');
+    })
+  );
+
   // ---- completion: globals everywhere, object methods after ':'
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
       LUA,
       {
-        provideCompletionItems(doc, pos) {
+        async provideCompletionItems(doc, pos) {
           const before = doc.lineAt(pos).text.slice(0, pos.character);
           if (/--/.test(before)) return [];
+          const str = stringContext(before);
+          if (str) {
+            if (!str.inCmd) return [];
+            const partial = (/[^\s]*$/.exec(str.text) || [''])[0];
+            const range = new vscode.Range(pos.line, pos.character - partial.length, pos.line, pos.character);
+            const items = suggestKeywords(str.text).map((k) => {
+              const item = new vscode.CompletionItem(k.name, k.kind === 'modifier' ? vscode.CompletionItemKind.Operator : vscode.CompletionItemKind.Keyword);
+              item.detail = k.kind;
+              item.documentation = k.doc;
+              item.range = range;
+              item.sortText = `${k.rank}${k.name}`;
+              return item;
+            });
+            // Real object numbers and labels from the running show, when the bridge is up.
+            for (const o of showSuggestions(str.text, await getShow())) {
+              const item = new vscode.CompletionItem(o.no, vscode.CompletionItemKind.Value);
+              item.detail = `${o.kind}: ${o.name}`;
+              item.filterText = `${o.no} ${o.name}`;
+              item.range = range;
+              item.sortText = `0${o.no.padStart(6, '0')}`;
+              items.push(item);
+            }
+            return items;
+          }
           const isMethod = /:\s*[A-Za-z_]*$/.test(before);
           const isMember = /\.\s*[A-Za-z_]*$/.test(before);
           if (isMember) return [];
@@ -49,6 +108,70 @@ function activate(context) {
       },
       ':'
     )
+  );
+
+  // ---- plugin manifest (.xml) completion and hover
+  const XML = { language: 'xml' };
+  const isManifest = (doc) => /<GMA3\b/.test(doc.getText()) || doc.getText().trim() === '';
+  context.subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(
+      XML,
+      {
+        provideCompletionItems(doc, pos) {
+          if (!isManifest(doc)) return [];
+          const ctx = contextAt(doc.getText(new vscode.Range(0, 0, pos.line, pos.character)));
+          const range = (n) => new vscode.Range(pos.line, pos.character - n, pos.line, pos.character);
+          if (ctx.kind === 'element') {
+            const names = ctx.parent ? (SCHEMA[ctx.parent] || { children: [] }).children : ['GMA3'];
+            return names.map((n) => {
+              const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.Struct);
+              item.documentation = SCHEMA[n].doc;
+              item.range = range(ctx.partial.length);
+              const attrs = Object.keys(SCHEMA[n].attrs).filter((a) => /^[A-Z]/.test(a) && (n !== 'Plugin' || a !== 'Author'));
+              const body = attrs.map((a, i) => `${a}="\${${i + 1}}"`).join(' ');
+              const close = SCHEMA[n].children.length ? `>\n\t$0\n</${n}>` : ' />';
+              item.insertText = new vscode.SnippetString(`${n}${body ? ' ' + body : ''}${close}`);
+              return item;
+            });
+          }
+          if (ctx.kind === 'attribute' && SCHEMA[ctx.element]) {
+            return Object.entries(SCHEMA[ctx.element].attrs)
+              .filter(([a]) => !ctx.used.includes(a))
+              .map(([a, d]) => {
+                const item = new vscode.CompletionItem(a, vscode.CompletionItemKind.Property);
+                item.documentation = d;
+                item.range = range(ctx.partial.length);
+                item.insertText = new vscode.SnippetString(`${a}="\${1}"`);
+                return item;
+              });
+          }
+          if (ctx.kind === 'value') {
+            return valuesFor(ctx.element, ctx.attr).map((v) => {
+              const item = new vscode.CompletionItem(v, vscode.CompletionItemKind.Value);
+              item.range = range(ctx.partial.length);
+              return item;
+            });
+          }
+          return [];
+        },
+      },
+      '<',
+      ' ',
+      '"'
+    ),
+    vscode.languages.registerHoverProvider(XML, {
+      provideHover(doc, pos) {
+        if (!isManifest(doc)) return null;
+        const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_][\w.-]*/);
+        if (!range) return null;
+        const word = doc.getText(range);
+        const ctx = contextAt(doc.getText(new vscode.Range(0, 0, pos.line, range.end.character)));
+        if (ctx.kind === 'element' && SCHEMA[word]) return new vscode.Hover(new vscode.MarkdownString(`**<${word}>** ${SCHEMA[word].doc}`), range);
+        if (ctx.kind === 'attribute' && SCHEMA[ctx.element] && SCHEMA[ctx.element].attrs[word])
+          return new vscode.Hover(new vscode.MarkdownString(`**${word}** ${SCHEMA[ctx.element].attrs[word]}`), range);
+        return null;
+      },
+    })
   );
 
   // ---- hover
@@ -107,6 +230,12 @@ function activate(context) {
           )
         );
       }
+      const sev = { warning: vscode.DiagnosticSeverity.Warning, hint: vscode.DiagnosticSeverity.Hint };
+      for (const f of lintRules(doc.getText(), index.api, { globals: cfg().get('lint.globals') })) {
+        const d = new vscode.Diagnostic(lineRange(f.line), f.message, sev[f.severity]);
+        d.code = f.rule;
+        found.push(d);
+      }
     } else if (doc.fileName.toLowerCase().endsWith('.xml')) {
       for (const p of checkManifest(doc.getText(), path.dirname(doc.fileName))) {
         found.push(
@@ -132,11 +261,31 @@ function activate(context) {
       const msg = `Deployed ${copied.length} file(s) to ${path.dirname(copied[0])}`;
       if (quiet) vscode.window.setStatusBarMessage(msg, 3000);
       else vscode.window.showInformationMessage(msg);
+      return manifest;
     } catch (err) {
       vscode.window.showErrorMessage(`grandMA3 deploy failed: ${err.message}`);
+      return null;
     }
   }
   context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.deployAndRun', async () => {
+      const file = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName;
+      if (!file) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
+      await vscode.workspace.saveAll(false);
+      const manifest = deployFile(file, true);
+      if (!manifest) return;
+      const slot = cfg().get('deployAndRun.slot');
+      if (!slot) return vscode.window.showInformationMessage('Deployed. Set ma3.deployAndRun.slot to also re-import and start the plugin on the console.');
+      output.show(true);
+      output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}`);
+      try {
+        const r = await bridge.run(bridgeDir(), reloadLua(path.basename(manifest, path.extname(manifest)), slot), cfg().get('bridge.timeout'));
+        output.appendLine(bridge.formatResult(r));
+      } catch (err) {
+        output.appendLine(`bridge error: ${err.message}`);
+        vscode.window.showErrorMessage(`grandMA3 reload failed: ${err.message}`);
+      }
+    }),
     vscode.commands.registerCommand('ma3.deploy', (uri) => {
       const file = (uri && uri.fsPath) || (vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName);
       if (!file) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
@@ -149,6 +298,41 @@ function activate(context) {
         } catch (_) {
           /* unrelated file */
         }
+      }
+    })
+  );
+
+  // ---- bump version and zip a plugin for sharing
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.packagePlugin', async (partArg) => {
+      const file = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName;
+      const manifest = file && findManifest(file);
+      if (!manifest) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
+      const part =
+        partArg ||
+        (await vscode.window.showQuickPick(['patch', 'minor', 'major', 'none'], { placeHolder: 'Bump the plugin version before packaging?' }));
+      if (!part) return;
+      try {
+        await vscode.workspace.saveAll(false);
+        let xml = fs.readFileSync(manifest, 'utf8');
+        let note = '';
+        if (part !== 'none') {
+          const bumped = bumpVersion(xml, part);
+          xml = bumped.xml;
+          fs.writeFileSync(manifest, xml);
+          note = ` (version ${bumped.from} -> ${bumped.to})`;
+        }
+        const version = (/<Plugin\b[^>]*?\bVersion="([^"]*)"/.exec(xml) || [])[1];
+        const name = path.basename(manifest, path.extname(manifest));
+        const files = filesForManifest(manifest).map((f) => ({ name: path.basename(f), data: fs.readFileSync(f) }));
+        const dist = path.join(path.dirname(manifest), 'dist');
+        fs.mkdirSync(dist, { recursive: true });
+        const out = path.join(dist, `${name}${version ? `-${version}` : ''}.zip`);
+        fs.writeFileSync(out, zip(files));
+        const pick = await vscode.window.showInformationMessage(`Packaged ${files.length} files${note}: ${path.basename(out)}`, 'Reveal');
+        if (pick === 'Reveal') vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(out));
+      } catch (err) {
+        vscode.window.showErrorMessage(`grandMA3 package failed: ${err.message}`);
       }
     })
   );
@@ -243,6 +427,57 @@ function activate(context) {
       } catch (err) {
         vscode.window.showErrorMessage(`grandMA3 reset failed: ${err.message}`);
       }
+    })
+  );
+
+  // ---- console object browser (tree of Root() through the bridge)
+  const treeChanged = new vscode.EventEmitter();
+  const luaPath = (p) => `Root()${p.map((i) => `[${i}]`).join('')}`;
+  const objectTree = {
+    onDidChangeTreeData: treeChanged.event,
+    getTreeItem: (el) => el.item,
+    async getChildren(el) {
+      const path = el ? el.path : [];
+      try {
+        const r = await bridge.run(bridgeDir(), listLua(path), cfg().get('bridge.timeout'));
+        if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
+        const { total, items } = parseList(r.returns);
+        const nodes = items.map((c) => {
+          const item = new vscode.TreeItem(c.name, c.count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+          item.description = c.addr;
+          item.tooltip = `${c.name}\n${luaPath(path.concat(c.index))}\n${c.count} child${c.count === 1 ? '' : 'ren'}`;
+          item.contextValue = 'ma3object';
+          return { item, path: path.concat(c.index), addr: c.addr };
+        });
+        const last = items.length ? items[items.length - 1].index : 0;
+        if (last < total) {
+          const item = new vscode.TreeItem(`${total - last} more not shown`);
+          item.description = 'index into it from Lua';
+          nodes.push({ item, path });
+        }
+        return nodes;
+      } catch (err) {
+        return [{ item: new vscode.TreeItem(`${err.message} (refresh to retry)`), path, error: true }];
+      }
+    },
+  };
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('ma3.objects', objectTree),
+    vscode.commands.registerCommand('ma3.objects.refresh', () => treeChanged.fire()),
+    vscode.commands.registerCommand('ma3.objects.copyPath', async (el) => {
+      if (!el || !el.path) return;
+      await vscode.env.clipboard.writeText(luaPath(el.path));
+      vscode.window.setStatusBarMessage(`Copied ${luaPath(el.path)}`, 3000);
+    }),
+    vscode.commands.registerCommand('ma3.objects.copyAddress', async (el) => {
+      if (!el || !el.addr) return;
+      await vscode.env.clipboard.writeText(el.addr);
+      vscode.window.setStatusBarMessage(`Copied ${el.addr}`, 3000);
+    }),
+    vscode.commands.registerCommand('ma3.objects.insertPath', async (el) => {
+      const editor = vscode.window.activeTextEditor;
+      if (!el || !el.path || !editor) return;
+      await editor.edit((b) => b.insert(editor.selection.active, luaPath(el.path)));
     })
   );
 
