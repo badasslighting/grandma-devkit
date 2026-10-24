@@ -2,7 +2,7 @@
   "name": "ma3dev",
   "displayName": "MA3dev for VScode",
   "description": "Write grandMA3 Lua plugins: API completion, hover and signature help, plugin scaffolding, one-command deploy, manifest and blocking-loop checks.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "badasslighting",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/badasslighting/ma3dev-for-vscode.git" },
