@@ -9,7 +9,8 @@ const { lintRules } = require('./lib/rules');
 const { checkManifest } = require('./lib/manifest');
 const { SCHEMA, SCHEMA_MA2, schemaFor, rootOf, isMa2, contextAt, valuesFor } = require('./lib/manifestSchema');
 const { luaTemplate, xmlTemplate, ma2LuaTemplate, ma2XmlTemplate, validName } = require('./lib/templates');
-const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifest, deploy, reloadLua, reloadLuaMa2 } = require('./lib/deploy');
+const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifest, deploy, reloadLua, reloadLuaMa2, reloadCommands, importCollisions } = require('./lib/deploy');
+const { openSession, listen } = require('./lib/telnet');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget } = require('./lib/target');
 const { bumpVersion, zip } = require('./lib/release');
@@ -397,9 +398,16 @@ function activate(context) {
       if (!slot) return vscode.window.showInformationMessage('Deployed. Set ma3.deployAndRun.slot to also re-import and start the plugin on the console.');
       output.show(true);
       const ma2 = manifestIsMa2(manifest);
+      const name = path.basename(manifest, path.extname(manifest));
+      // grandMA2 can also be driven over Telnet, which works when the bridge isn't running.
+      const via = cfg().get('deployAndRun.via');
+      if (ma2 && (via === 'telnet' || (via === 'auto' && !bridge.status(bridgeDirFor('ma2')).running))) {
+        output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot} (grandMA2, Telnet)`);
+        warnCollisions(ma2PluginsFolder(), name);
+        return sendLines(reloadCommands('ma2', name, slot));
+      }
       output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}${ma2 ? ' (grandMA2)' : ''}`);
       try {
-        const name = path.basename(manifest, path.extname(manifest));
         const code = ma2 ? reloadLuaMa2(name, slot) : reloadLua(name, slot);
         const r = await bridge.run(bridgeDirFor(ma2 ? 'ma2' : 'ma3'), code, cfg().get('bridge.timeout'));
         output.appendLine(bridge.formatResult(r));
@@ -611,6 +619,158 @@ function activate(context) {
       const editor = vscode.window.activeTextEditor;
       if (!el || !el.path || !editor) return;
       await editor.edit((b) => b.insert(editor.selection.active, luaPath(el.path)));
+    })
+  );
+
+  // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
+  const telnetOut = vscode.window.createOutputChannel('grandMA Telnet');
+  context.subscriptions.push(telnetOut);
+  const telnetOptions = async () => ({
+    host: cfg().get('telnet.host'),
+    port: cfg().get('telnet.port'),
+    user: cfg().get('telnet.user'),
+    password: (await context.secrets.get('ma3.telnet.password')) || '',
+    gapMs: cfg().get('telnet.gapMs'),
+  });
+  // Commands that discard work or end the session are confirmed before they go out.
+  const RISKY = /^\s*(NewShow|LoadShow|Delete|Unpatch|Format|Reset|Shutdown|Reboot|ClearAll)\b/i;
+  async function confirmRisky(commands) {
+    const risky = commands.filter((c) => RISKY.test(c));
+    if (!risky.length) return true;
+    const pick = await vscode.window.showWarningMessage(`Send ${risky.length === 1 ? 'this command' : 'these commands'} to the console?\n${risky.join('\n')}`, { modal: true }, 'Send');
+    return pick === 'Send';
+  }
+  // Runs commands one after another in a fresh session, stopping at the first console error.
+  // A stray `Name.xml.backup...` next to the plugin makes `Import "Name"` create a duplicate plugin.
+  function warnCollisions(dir, name) {
+    const extra = importCollisions(dir, name);
+    if (extra.length) {
+      vscode.window.showWarningMessage(`grandMA2 imports every file starting with "${name}", so ${extra.join(', ')} in ${dir} creates a duplicate plugin. Move it out of the plugins folder.`);
+    }
+    return extra;
+  }
+  async function sendLines(commands) {
+    telnetOut.show(true);
+    try {
+      const session = await openSession(await telnetOptions());
+      try {
+        const done = [];
+        for (const cmd of commands) {
+          telnetOut.appendLine(`> ${cmd}`);
+          const r = await session.send(cmd);
+          for (const l of r.lines) if (!/^Executing : /.test(l)) telnetOut.appendLine(`  ${l}`);
+          done.push({ cmd, ...r });
+          if (r.errors.length) break;
+        }
+        return done;
+      } finally {
+        session.close();
+      }
+    } catch (err) {
+      telnetOut.appendLine(`telnet error: ${err.message}`);
+      vscode.window.showErrorMessage(`Telnet failed: ${err.message}`);
+      return null;
+    }
+  }
+  let monitor = null;
+  const stopMonitor = () => {
+    if (monitor) monitor.close();
+    monitor = null;
+  };
+  context.subscriptions.push(
+    { dispose: stopMonitor },
+    vscode.commands.registerCommand('ma3.telnet.send', async (cmdArg) => {
+      const cmd = typeof cmdArg === 'string' ? cmdArg : await vscode.window.showInputBox({ prompt: 'Console command line command', placeHolder: 'Go+ Executor 1' });
+      if (!cmd || !cmd.trim()) return null;
+      if (!(await confirmRisky([cmd]))) return null;
+      return sendLines([cmd.trim()]);
+    }),
+    vscode.commands.registerCommand('ma3.telnet.sendSelection', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return null;
+      const sel = editor.selection;
+      const text = sel.isEmpty ? editor.document.lineAt(sel.active.line).text : editor.document.getText(sel);
+      const cmds = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^(--|#)/.test(l));
+      if (!cmds.length) return vscode.window.showWarningMessage('No command lines selected.');
+      if (cmds.length > 1) {
+        const pick = await vscode.window.showWarningMessage(`Send ${cmds.length} lines to the console as commands?`, { modal: true }, 'Send');
+        if (pick !== 'Send') return null;
+      }
+      if (!(await confirmRisky(cmds))) return null;
+      return sendLines(cmds);
+    }),
+    vscode.commands.registerCommand('ma3.telnet.setPassword', async () => {
+      const pw = await vscode.window.showInputBox({ prompt: 'Password of the console user profile (leave empty if it has none)', password: true });
+      if (pw === undefined) return;
+      if (pw) await context.secrets.store('ma3.telnet.password', pw);
+      else await context.secrets.delete('ma3.telnet.password');
+      vscode.window.setStatusBarMessage(pw ? 'Telnet password stored' : 'Telnet password cleared', 3000);
+    }),
+    vscode.commands.registerCommand('ma3.telnet.monitor', async () => {
+      stopMonitor();
+      telnetOut.show(true);
+      try {
+        // On connect the console replays its whole log (hundreds of lines): show only the tail of that.
+        const backlog = [];
+        let live = false;
+        setTimeout(() => {
+          live = true;
+          if (backlog.length > 20) telnetOut.appendLine(`[monitor] ... ${backlog.length - 20} earlier lines skipped`);
+          for (const l of backlog.slice(-20)) telnetOut.appendLine(`[monitor] ${l}`);
+          backlog.length = 0;
+        }, 900);
+        monitor = await listen({
+          host: cfg().get('telnet.host'),
+          port: cfg().get('telnet.monitorPort'),
+          onLine: (l) => (live ? telnetOut.appendLine(`[monitor] ${l}`) : backlog.push(l)),
+          onClose: () => {
+            telnetOut.appendLine('[monitor] closed');
+            monitor = null;
+          },
+        });
+        telnetOut.appendLine(`[monitor] listening on ${cfg().get('telnet.host')}:${cfg().get('telnet.monitorPort')} (System Monitor: Lua runtime errors and console messages)`);
+      } catch (err) {
+        telnetOut.appendLine(`[monitor] ${err.message}`);
+        vscode.window.showErrorMessage(`Monitor failed: ${err.message}`);
+      }
+    }),
+    vscode.commands.registerCommand('ma3.telnet.stopMonitor', () => {
+      stopMonitor();
+      vscode.window.setStatusBarMessage('Console monitor stopped', 3000);
+    }),
+    // Copies the LuaBridge plugin into the plugins folder and, on grandMA2, imports and starts it over Telnet.
+    vscode.commands.registerCommand('ma3.installBridge', async (opts = {}) => {
+      const ma2 = (opts.target || activeTarget()) === 'ma2';
+      const names = ma2 ? ['LuaBridge_MA2.lua', 'LuaBridge_MA2.xml'] : ['LuaBridge.lua', 'LuaBridge.xml'];
+      const dest = ma2 ? ma2PluginsFolder() : pluginsFolder();
+      if (!dest) return vscode.window.showWarningMessage(`No plugins folder for ${ma2 ? 'grandMA2' : 'grandMA3'}; set ${ma2 ? 'ma3.ma2.pluginsPath' : 'ma3.pluginsPath'}.`);
+      try {
+        fs.mkdirSync(dest, { recursive: true });
+        for (const n of names) fs.copyFileSync(path.join(context.extensionPath, 'bridge', n), path.join(dest, n));
+      } catch (err) {
+        return vscode.window.showErrorMessage(`Could not copy the LuaBridge plugin: ${err.message}`);
+      }
+      if (!ma2) return vscode.window.showInformationMessage(`LuaBridge copied to ${dest}. Import it from the plugin pool (User library) and tap it to start.`);
+      // Importing again would restart the bridge (and, with a stray backup file around, add duplicates), so leave a running one alone.
+      if (!opts.force && bridge.status(bridgeDirFor('ma2')).running) {
+        vscode.window.showInformationMessage('LuaBridge_MA2 files updated; the bridge is already running. Re-import it (or pass force) to load the new copy.');
+        return true;
+      }
+      const slot = opts.slot || (await vscode.window.showInputBox({ prompt: 'Plugin pool slot to import LuaBridge_MA2 into (overwrites that slot)', value: String(cfg().get('bridge.slot') || 99), validateInput: (v) => (/^\d+$/.test(v) ? null : 'A slot number') }));
+      if (!slot) return null;
+      warnCollisions(dest, 'LuaBridge_MA2');
+      const done = await sendLines(reloadCommands('ma2', 'LuaBridge_MA2', slot));
+      if (!done || done.some((d) => d.errors.length)) return null;
+      const dir = bridgeDirFor('ma2');
+      for (let i = 0; i < 24; i++) {
+        if (bridge.status(dir).running) {
+          vscode.window.showInformationMessage('LuaBridge_MA2 is running; Run on Console now works for grandMA2.');
+          return true;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      vscode.window.showWarningMessage('Imported and started, but no LuaBridge heartbeat yet. Check the plugin in the pool and the System Monitor.');
+      return false;
     })
   );
 

@@ -40,8 +40,8 @@ try {
   /* suite never reported */
 }
 if (result) {
-  for (const t of result.tests) console.log(`${t.ok ? 'ok  ' : 'FAIL'} ${t.name}${t.ok ? '' : `\n     ${t.error}`}`);
-  console.log(`${result.tests.filter((t) => t.ok).length}/${result.tests.length} passed`);
+  for (const t of result.tests) console.log(`${t.skipped ? 'skip' : t.ok ? 'ok  ' : 'FAIL'} ${t.name}${t.skipped ? ` (${t.skipped})` : t.ok ? '' : `\n     ${t.error}`}`);
+  console.log(`${result.tests.filter((t) => t.ok && !t.skipped).length}/${result.tests.length} passed, ${result.tests.filter((t) => t.skipped).length} skipped`);
 } else {
   console.error(`No result written (exit ${r.status}). Scratch: ${scratch}`);
 }
