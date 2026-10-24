@@ -7,6 +7,7 @@ const { snippetFor, hoverMarkdown, buildIndex, activeCall } = require('./lib/api
 const { findBlockingLoops } = require('./lib/lint');
 const { lintRules } = require('./lib/rules');
 const { checkManifest } = require('./lib/manifest');
+const { SCHEMA, contextAt, valuesFor } = require('./lib/manifestSchema');
 const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
 const { defaultPluginsPath, findManifest, deploy, reloadLua } = require('./lib/deploy');
 const { stringContext, suggestKeywords } = require('./lib/cmdContext');
@@ -66,6 +67,70 @@ function activate(context) {
       },
       ':'
     )
+  );
+
+  // ---- plugin manifest (.xml) completion and hover
+  const XML = { language: 'xml' };
+  const isManifest = (doc) => /<GMA3\b/.test(doc.getText()) || doc.getText().trim() === '';
+  context.subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(
+      XML,
+      {
+        provideCompletionItems(doc, pos) {
+          if (!isManifest(doc)) return [];
+          const ctx = contextAt(doc.getText(new vscode.Range(0, 0, pos.line, pos.character)));
+          const range = (n) => new vscode.Range(pos.line, pos.character - n, pos.line, pos.character);
+          if (ctx.kind === 'element') {
+            const names = ctx.parent ? (SCHEMA[ctx.parent] || { children: [] }).children : ['GMA3'];
+            return names.map((n) => {
+              const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.Struct);
+              item.documentation = SCHEMA[n].doc;
+              item.range = range(ctx.partial.length);
+              const attrs = Object.keys(SCHEMA[n].attrs).filter((a) => /^[A-Z]/.test(a) && (n !== 'Plugin' || a !== 'Author'));
+              const body = attrs.map((a, i) => `${a}="\${${i + 1}}"`).join(' ');
+              const close = SCHEMA[n].children.length ? `>\n\t$0\n</${n}>` : ' />';
+              item.insertText = new vscode.SnippetString(`${n}${body ? ' ' + body : ''}${close}`);
+              return item;
+            });
+          }
+          if (ctx.kind === 'attribute' && SCHEMA[ctx.element]) {
+            return Object.entries(SCHEMA[ctx.element].attrs)
+              .filter(([a]) => !ctx.used.includes(a))
+              .map(([a, d]) => {
+                const item = new vscode.CompletionItem(a, vscode.CompletionItemKind.Property);
+                item.documentation = d;
+                item.range = range(ctx.partial.length);
+                item.insertText = new vscode.SnippetString(`${a}="\${1}"`);
+                return item;
+              });
+          }
+          if (ctx.kind === 'value') {
+            return valuesFor(ctx.element, ctx.attr).map((v) => {
+              const item = new vscode.CompletionItem(v, vscode.CompletionItemKind.Value);
+              item.range = range(ctx.partial.length);
+              return item;
+            });
+          }
+          return [];
+        },
+      },
+      '<',
+      ' ',
+      '"'
+    ),
+    vscode.languages.registerHoverProvider(XML, {
+      provideHover(doc, pos) {
+        if (!isManifest(doc)) return null;
+        const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_][\w.-]*/);
+        if (!range) return null;
+        const word = doc.getText(range);
+        const ctx = contextAt(doc.getText(new vscode.Range(0, 0, pos.line, range.end.character)));
+        if (ctx.kind === 'element' && SCHEMA[word]) return new vscode.Hover(new vscode.MarkdownString(`**<${word}>** ${SCHEMA[word].doc}`), range);
+        if (ctx.kind === 'attribute' && SCHEMA[ctx.element] && SCHEMA[ctx.element].attrs[word])
+          return new vscode.Hover(new vscode.MarkdownString(`**${word}** ${SCHEMA[ctx.element].attrs[word]}`), range);
+        return null;
+      },
+    })
   );
 
   // ---- hover
