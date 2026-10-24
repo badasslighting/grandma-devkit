@@ -43,6 +43,7 @@
       { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
       { "command": "ma3.telnet.send", "title": "Send Command to Console (Telnet)", "category": "grandMA" },
       { "command": "ma3.telnet.sendSelection", "title": "Send Selected Lines to Console as Commands (Telnet)", "category": "grandMA" },
+      { "command": "ma3.runLuaTests", "title": "Run Lua Tests in This File on Console", "category": "grandMA" },
       { "command": "ma3.updateApiFromConsole", "title": "Update API from Console (grandMA3)", "category": "grandMA" },
       { "command": "ma3.checkMa2Api", "title": "Check grandMA2 API List Against Console", "category": "grandMA" },
       { "command": "ma3.setupLanguageServer", "title": "Set Up Lua Language Server Definitions", "category": "grandMA" },
@@ -140,6 +141,12 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "Plugin pool slot **Install LuaBridge on Console** suggests for LuaBridge_MA2 (0 means 99)."
+        },
+        "ma3.test.timeout": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "markdownDescription": "CPU seconds a `*.test.lua` run may use on the console before the bridge stops it. The console UI is frozen that long."
         },
         "ma3.usb.path": {
           "type": "string",

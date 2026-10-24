@@ -297,6 +297,40 @@ testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', as
   assert.ok(bridge.status(dir).running, 'the original bridge is running again');
 });
 
+testMa3('Lua tests run on the console and report passes, failures with their line, and console reads (grandMA3)', async () => {
+  const file = path.join(ws, 'demo.test.lua');
+  fs.writeFileSync(file, ["test('adds', function() assertEq(1 + 1, 2) end)", "test('fails', function() assertEq(1, 2, 'one vs two') end)", "test('reads the console', function()", '  assertNotNil(Root())', "  assertEq(type(Root():Count()), 'number')", 'end)', "test('no global leaks', function() leakedByTest = 1 end)", ''].join('\n'));
+  try {
+    const res = await vscode.commands.executeCommand('ma3.runLuaTests', file);
+    assert.strictEqual(res.error, null, `run error: ${res.error}`);
+    assert.deepStrictEqual(res.results.map((r) => [r.name, r.ok]), [['adds', true], ['fails', false], ['reads the console', true], ['no global leaks', true]]);
+    assert.match(res.results[1].error, /^testfile:2: one vs two: expected 2, got 1$/);
+    const bridge = require('../../lib/bridge');
+    const leaked = await bridge.run(bridge.defaultBridgeDir(), 'return tostring(leakedByTest)', 5);
+    assert.match(leaked.returns[0], /nil/, 'test globals stay out of the console');
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+tests.push({
+  name: 'Lua tests run on grandMA2 through LuaBridge_MA2',
+  needs: () => up(bridgeLib.defaultBridgeDirMa2()),
+  why: 'grandMA2 onPC LuaBridge_MA2 not running',
+  fn: async () => {
+    const file = path.join(ws, 'ma2demo.test.lua');
+    fs.writeFileSync(file, ["test('reads the version', function() assertMatch(tostring((gma.show.getvar('VERSION'))), '^3%.') end)", "test('fails', function() assertTrue(false) end)", ''].join('\n'));
+    try {
+      const res = await vscode.commands.executeCommand('ma3.runLuaTests', file);
+      assert.strictEqual(res.error, null, `run error: ${res.error}`);
+      assert.strictEqual(res.target, 'ma2');
+      assert.deepStrictEqual(res.results.map((r) => [r.name, r.ok]), [['reads the version', true], ['fails', false]]);
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  },
+});
+
 testMa3('Root().Path. completes children and properties from the console (grandMA3)', async () => {
   const { doc } = await openLua('paths.lua', 'local a = Root().\nlocal b = Root().ShowData.DataPools[1].\nlocal c = Root().ShowData.\n');
   const labels = (list) => list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
