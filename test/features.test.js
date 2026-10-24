@@ -29,7 +29,8 @@ test('object tree: listLua builds an index path and parseList decodes the bridge
   const { listLua, parseList, unquote } = require('../lib/objectTree');
   assert.match(listLua([14, 14, 'x', -1]), /ipairs\(\{14, 14\}\)/);
   const q = '"total=2 ;; 1|3|14.1|Show \\"A\\" ;; 2|0|14.2|Plain"';
-  assert.strictEqual(unquote('"a\\nb"'), 'a\nb');
+  const bs = String.fromCharCode(92);
+  assert.strictEqual(unquote(`"a${bs}${String.fromCharCode(10)}b"`), 'a\nb');
   assert.deepStrictEqual(parseList([q]), {
     total: 2,
     items: [
