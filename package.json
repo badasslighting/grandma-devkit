@@ -68,6 +68,11 @@
           "minimum": 0.1,
           "markdownDescription": "Seconds of CPU time a run may use before the bridge stops it. The console UI is frozen for that long, and time spent in `coroutine.yield` counts."
         },
+        "ma3.lint.globals": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hint when a variable is assigned without \"local\" and so becomes a global shared with every plugin."
+        },
         "ma3.diagnostics": {
           "type": "boolean",
           "default": true,
