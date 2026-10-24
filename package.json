@@ -1,13 +1,13 @@
 {
-  "name": "ma3-plugin-dev",
-  "displayName": "grandMA3 Plugin Dev",
+  "name": "ma3dev",
+  "displayName": "MA3dev for VScode",
   "description": "Write grandMA3 Lua plugins: API completion, hover and signature help, plugin scaffolding, one-command deploy, manifest and blocking-loop checks.",
   "version": "0.1.0",
   "publisher": "badasslighting",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/badasslighting/ma3-plugin-dev.git" },
-  "bugs": { "url": "https://github.com/badasslighting/ma3-plugin-dev/issues" },
-  "homepage": "https://github.com/badasslighting/ma3-plugin-dev#readme",
+  "repository": { "type": "git", "url": "https://github.com/badasslighting/ma3dev-for-vscode.git" },
+  "bugs": { "url": "https://github.com/badasslighting/ma3dev-for-vscode/issues" },
+  "homepage": "https://github.com/badasslighting/ma3dev-for-vscode#readme",
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Programming Languages", "Snippets", "Linters"],
   "keywords": ["grandMA3", "MA3", "lua", "lighting", "plugin"],
@@ -34,7 +34,7 @@
       ]
     },
     "configuration": {
-      "title": "grandMA3 Plugin Dev",
+      "title": "MA3dev for VScode",
       "properties": {
         "ma3.pluginsPath": {
           "type": "string",

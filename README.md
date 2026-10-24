@@ -1,4 +1,4 @@
-# grandMA3 Plugin Dev
+# MA3dev for VScode
 
 VS Code support for writing grandMA3 Lua plugins.
 
