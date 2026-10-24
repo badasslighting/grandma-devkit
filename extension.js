@@ -514,7 +514,7 @@ function activate(context) {
   );
 
   // ---- run on console through the LuaBridge plugin
-  const output = vscode.window.createOutputChannel('grandMA3');
+  const output = vscode.window.createOutputChannel('grandMA Devkit');
   const runDiagnostics = vscode.languages.createDiagnosticCollection('ma3-run');
   context.subscriptions.push(output, runDiagnostics);
   const bridgeDir = () => bridgeDirFor('ma3');
