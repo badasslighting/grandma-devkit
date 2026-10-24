@@ -94,6 +94,53 @@ test('object browser lists Root children through the bridge', async () => {
   assert.ok(total > 5 && items.some((i) => i.name === 'ShowData'), 'Root has ShowData');
 });
 
+test('grandMA2: gma.* completes, hovers, shows signatures and lints', async () => {
+  const { doc } = await openLua('ma2.lua', 'gma.\ngma.cmd("Go+")\ngma.feedbak("x")\nfor i = 1, 3 do gma.cmd("Go+") end\nreturn 1\n');
+  const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 4));
+  const labels = list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
+  assert.ok(['cmd', 'show', 'gui', 'user'].every((l) => labels.includes(l)), `gma members offered: ${labels.slice(0, 8)}`);
+  const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', doc.uri, new vscode.Position(1, 6));
+  assert.ok(hovers.some((h) => h.contents.some((c) => /gma\.cmd\(command\)/.test(c.value))), 'hover shows the gma.cmd signature');
+  await openLua('ma2sig.lua', 'gma.cmd(\n');
+  const sigDoc = vscode.window.activeTextEditor.document;
+  const sig = await vscode.commands.executeCommand('vscode.executeSignatureHelpProvider', sigDoc.uri, new vscode.Position(0, 8), '(');
+  assert.ok(sig && sig.signatures.some((s) => s.label.startsWith('gma.cmd(')), `signature help for gma.cmd: ${JSON.stringify(sig)}`);
+  const codes = await until(() => {
+    const d = vscode.languages.getDiagnostics(doc.uri);
+    return d.length >= 2 ? d.map((x) => x.code).sort() : null;
+  }, 'ma2 diagnostics');
+  assert.deepStrictEqual(codes, ['cmd-in-loop', 'unknown-api']);
+});
+
+test('grandMA2: gma.cmd strings complete console keywords', async () => {
+  const { doc } = await openLua('ma2cmd.lua', 'gma.cmd("Store Seq")\n');
+  const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 17));
+  assert.ok(list.items.some((i) => i.label === 'Sequence'), 'Sequence offered inside gma.cmd string');
+});
+
+test('grandMA2: manifest XML completes the MA root, Plugin attributes and flags problems', async () => {
+  const file = path.join(ws, 'M.xml');
+  fs.writeFileSync(file, '<MA xmlns="http://schemas.malighting.de/grandma2/xml/MA" major_vers="3" minor_vers="9" stream_vers="61">\n\t<Plugin index="0" na\n</MA>\n');
+  const doc = await vscode.workspace.openTextDocument(file);
+  await vscode.window.showTextDocument(doc);
+  const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(1, 22));
+  const labels = list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
+  assert.ok(labels.includes('name') && labels.includes('luafile') && !labels.includes('index'), `Plugin attributes: ${labels}`);
+});
+
+test('grandMA2: New grandMA2 Plugin writes a manifest and Lua that pass the checks', async () => {
+  await vscode.commands.executeCommand('ma3.newPluginMa2', 'UiMa2Demo');
+  const xml = fs.readFileSync(path.join(ws, 'UiMa2Demo', 'UiMa2Demo.xml'), 'utf8');
+  assert.match(xml, /<MA xmlns="http:\/\/schemas\.malighting\.de\/grandma2\/xml\/MA"/);
+  assert.match(xml, /name="UiMa2Demo" luafile="UiMa2Demo\.lua"/);
+  const lua = fs.readFileSync(path.join(ws, 'UiMa2Demo', 'UiMa2Demo.lua'), 'utf8');
+  assert.match(lua, /gma\.feedback/);
+  const mdoc = await vscode.workspace.openTextDocument(path.join(ws, 'UiMa2Demo', 'UiMa2Demo.xml'));
+  await vscode.window.showTextDocument(mdoc);
+  await sleep(500);
+  assert.deepStrictEqual(vscode.languages.getDiagnostics(mdoc.uri), []);
+});
+
 test('contributed settings have the declared defaults', async () => {
   const cfg = vscode.workspace.getConfiguration('ma3');
   assert.strictEqual(cfg.get('bridge.timeout'), 2);
