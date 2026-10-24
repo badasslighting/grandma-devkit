@@ -297,6 +297,44 @@ testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', as
   assert.ok(bridge.status(dir).running, 'the original bridge is running again');
 });
 
+tests.push({
+  name: 'grandMA2: gma.cmd strings complete real macros and layouts, and the object tree lists roots and children',
+  needs: () => up(bridgeLib.defaultBridgeDirMa2()),
+  why: 'grandMA2 onPC LuaBridge_MA2 not running',
+  fn: async () => {
+    const { openSession } = require('../../lib/telnet');
+    const { ma2TreeLua, parseMa2Tree } = require('../../lib/ma2Objects');
+    await vscode.workspace.getConfiguration('ma3').update('telnet.user', 'Devkit', vscode.ConfigurationTarget.Global);
+    const session = await openSession({ user: 'Devkit', password: '' });
+    try {
+      for (const c of ['Store Macro 99 /nc', 'Label Macro 99 "UiDevkitMacro"', 'Store Layout 7 /nc', 'Label Layout 7 "UiDevkitLayout"']) {
+        const r = await session.send(c);
+        assert.deepStrictEqual(r.errors, [], `${c}: ${JSON.stringify(r.errors)}`);
+      }
+      const { doc } = await openLua('ma2show.lua', 'gma.cmd("Store Macro ")\ngma.cmd("Store Layout ")\n');
+      await vscode.commands.executeCommand('ma3.refreshShow');
+      const complete = (line, col) => vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(line, col));
+      const macros = await complete(0, 21);
+      assert.ok(macros.items.some((i) => i.label === '99' && /UiDevkitMacro/.test(i.detail)), 'macro 99 offered with its label');
+      const layouts = await complete(1, 22);
+      assert.ok(layouts.items.some((i) => i.label === '7' && /UiDevkitLayout/.test(i.detail)), 'layout 7 offered with its label');
+
+      const bridge = require('../../lib/bridge');
+      const dir = bridge.defaultBridgeDirMa2();
+      const roots = parseMa2Tree((await bridge.run(dir, ma2TreeLua([]), 5)).returns);
+      assert.ok(roots.total > 5 && roots.items.some((i) => i.cls === 'SETTINGS_COLLECT'), `roots: ${JSON.stringify(roots.items.slice(0, 3))}`);
+      const settings = roots.items.find((i) => i.cls === 'SETTINGS_COLLECT');
+      const kids = parseMa2Tree((await bridge.run(dir, ma2TreeLua([settings.index]), 5)).returns);
+      assert.ok(kids.items.some((i) => i.cls === 'LOCAL_SETTINGS'), 'children of Settings');
+      assert.strictEqual(await vscode.commands.executeCommand('ma3.objects.switch', 'ma2'), 'ma2');
+    } finally {
+      await vscode.commands.executeCommand('ma3.objects.switch', 'ma3');
+      for (const c of ['Delete Macro 99 /nc', 'Delete Layout 7 /nc']) await session.send(c).catch(() => {});
+      session.close();
+    }
+  },
+});
+
 testMa3('Lua tests run on the console and report passes, failures with their line, and console reads (grandMA3)', async () => {
   const file = path.join(ws, 'demo.test.lua');
   fs.writeFileSync(file, ["test('adds', function() assertEq(1 + 1, 2) end)", "test('fails', function() assertEq(1, 2, 'one vs two') end)", "test('reads the console', function()", '  assertNotNil(Root())', "  assertEq(type(Root():Count()), 'number')", 'end)', "test('no global leaks', function() leakedByTest = 1 end)", ''].join('\n'));

@@ -30,7 +30,7 @@ The extension decides per Lua file: grandMA2 when the code calls `gma.*` or the 
 - **New Plugin** creates `Name/Name.lua` and `Name/Name.xml`. **Copy Import Command for Plugin** copies `Import Plugin Library "Name" At Plugin N /nc`.
 - **Live completion** while the LuaBridge runs (`ma3.liveCompletion`; each lookup costs a few milliseconds of console time and is cached): real group, sequence, macro, preset, layout and timer numbers with their labels inside `Cmd` strings (**Refresh Show Objects for Completion** forces a refresh), `Enums.*` names and members, and attribute names inside `GetAttributeIndex("...")` and `Cmd("Attribute ...")`.
 - **Object path completion**: after a literal path such as `Root().ShowData.DataPools[1].`, the children and property names of that object complete from the console (only chains that start at `Root()`, with names, `[n]` indexes and `["name"]`; children whose names need `["..."]` are left out).
-- **grandMA3 Objects view** (Explorer sidebar): browse the console object tree (`Root()` and below). Right-click an object to copy its Lua path (`Root()[14][14]`), copy its address (`14.14`) or insert the path at the cursor.
+- **grandMA3 Objects view** (Explorer sidebar; also grandMA2, see below): browse the console object tree (`Root()` and below). Right-click an object to copy its Lua path (`Root()[14][14]`), copy its address (`14.14`) or insert the path at the cursor.
 - **Lua checks**: a misspelt API function (`printf` for `Printf`), an API function called with no arguments, `Cmd()` inside a loop, and heavy calls (`ObjectList`, `:Children()`, `CmdIndirectWait`) inside a `Timer` or `HookObjectChange` callback. `ma3.lint.globals` adds a hint for assignments without `local`.
 - Snippets: `ma3plugin`, `cmd`, `printf`, `forchildren`, `pcall`, `yield`.
 
@@ -63,7 +63,10 @@ Enable Telnet (the remote command line) on the console and set `ma3.telnet.user`
 - **Deploy and Reload on Console** uses Telnet when the bridge isn't running (`ma3.deployAndRun.via`: `auto`, `bridge` or `telnet`).
 - Import takes every file in the plugins folder whose name starts with the plugin's name, so a leftover `Name.xml.backup-...` next to a plugin makes the console import a duplicate; the extension warns when it sees one.
 
-Not covered for grandMA2 yet: live show completion and the object browser (grandMA3 only), and enum completion.
+- **Live show completion**: inside `gma.cmd("...")` strings, group, sequence, macro, layout, plugin and effect numbers complete with their labels from the show (`ma3.liveCompletion`; needs LuaBridge_MA2; refreshed at most once a minute). Presets are not covered.
+- **Object browser**: the **grandMA3 Objects** view in the Explorer has a switch button for grandMA2. It lists `Root 1` to `Root 30` and expands children lazily through `gma.show.getobj` (500 slots per level; empty slots are skipped). Right-click copies `gma.show.getobj.handle("Root 3.2")`, or the address `Root 3.2`; an object with no pool number has no address.
+
+Not covered for grandMA2 yet: enum completion and object path completion (both grandMA3 only).
 
 Lua language features (syntax, linting) come from the bundled `sumneko.lua` pack.
 

@@ -16,6 +16,7 @@ const { pathContext, childrenLua, parseChildren } = require('./lib/objectPath');
 const { buildRunLua, parseResults, discoverTests, errorLine } = require('./lib/luaTests');
 const { listRemovableDrives, planExport, exportToStick } = require('./lib/usb');
 const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = require('./lib/liveApi');
+const { ma2TreeLua, parseMa2Tree, ma2Address, ma2ShowLua } = require('./lib/ma2Objects');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget } = require('./lib/target');
@@ -76,25 +77,26 @@ function activate(context) {
   context.subscriptions.push(diagnostics);
 
   // ---- live show contents (cached; refreshed when stale, never when the bridge is down)
-  let showCache = { at: 0, data: null, pending: null };
+  const showCaches = { ma3: { at: 0, data: null, pending: null }, ma2: { at: 0, data: null, pending: null } };
   const SHOW_TTL_MS = 60000;
-  function getShow(force) {
-    if (!force && Date.now() - showCache.at < SHOW_TTL_MS) return Promise.resolve(showCache.data);
-    if (showCache.pending) return showCache.pending;
-    const dir = cfg().get('bridge.dir') || defaultBridgeDir();
-    if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return Promise.resolve(showCache.data);
-    showCache.pending = bridge
-      .run(dir, showLua(), cfg().get('bridge.timeout'))
+  function getShow(force, target = 'ma3') {
+    const cache = showCaches[target];
+    if (!force && Date.now() - cache.at < SHOW_TTL_MS) return Promise.resolve(cache.data);
+    if (cache.pending) return cache.pending;
+    const dir = bridgeDirFor(target);
+    if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return Promise.resolve(cache.data);
+    cache.pending = bridge
+      .run(dir, target === 'ma2' ? ma2ShowLua() : showLua(), cfg().get('bridge.timeout'))
       .then((r) => {
-        if (r.ok) showCache = { at: Date.now(), data: parseShow(r.returns), pending: null };
-        else showCache.pending = null;
-        return showCache.data;
+        if (r.ok) Object.assign(cache, { at: Date.now(), data: parseShow(r.returns), pending: null });
+        else cache.pending = null;
+        return cache.data;
       })
       .catch(() => {
-        showCache.pending = null;
-        return showCache.data;
+        cache.pending = null;
+        return cache.data;
       });
-    return showCache.pending;
+    return cache.pending;
   }
   // Enum and attribute names: static per software version or fixture patch, so cached for ten minutes.
   const nameCache = new Map();
@@ -118,7 +120,7 @@ function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand('ma3.refreshShow', async () => {
       nameCache.clear();
-      const data = await getShow(true);
+      const data = await getShow(true, activeTarget());
       const n = data ? Object.values(data).reduce((a, v) => a + v.length, 0) : 0;
       vscode.window.showInformationMessage(n ? `Loaded ${n} show objects for completion.` : 'No show data (is the LuaBridge plugin running, and ma3.liveCompletion on?).');
     })
@@ -155,7 +157,7 @@ function activate(context) {
               return item;
             });
             // Real object numbers and labels from the running show, when the bridge is up (grandMA3 only).
-            const live = targetOf(doc) === 'ma3' ? await getShow() : null;
+            const live = await getShow(false, targetOf(doc));
             for (const o of showSuggestions(str.text, live)) {
               const item = new vscode.CompletionItem(o.no, vscode.CompletionItemKind.Value);
               item.detail = `${o.kind}: ${o.name}`;
@@ -699,11 +701,37 @@ function activate(context) {
   // ---- console object browser (tree of Root() through the bridge)
   const treeChanged = new vscode.EventEmitter();
   const luaPath = (p) => `Root()${p.map((i) => `[${i}]`).join('')}`;
+  let treeTarget = 'ma3';
+  const ma2Lua = (addr) => `gma.show.getobj.handle("${addr}")`;
   const objectTree = {
     onDidChangeTreeData: treeChanged.event,
     getTreeItem: (el) => el.item,
     async getChildren(el) {
       const path = el ? el.path : [];
+      if (treeTarget === 'ma2') {
+        try {
+          const r = await bridge.run(bridgeDirFor('ma2'), ma2TreeLua(path), cfg().get('bridge.timeout'));
+          if (!r.ok) throw new Error(String(r.error).split(String.fromCharCode(10))[0]);
+          const { total, items } = parseMa2Tree(r.returns);
+          const nodes = items.map((c) => {
+            // Under the roots the index is the root number; below them a 0-based slot, and the pool number names the object.
+            const parts = (el ? el.parts : []).concat(el ? c.number : c.index);
+            const addr = ma2Address(parts);
+            const item = new vscode.TreeItem(c.name.trim() || c.cls, c.amount > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+            item.description = c.cls;
+            item.tooltip = `${c.name}\n${addr || '(no address: unnumbered object)'}\n${c.amount} slot${c.amount === 1 ? '' : 's'}`;
+            item.contextValue = 'ma3object';
+            return { item, path: path.concat(c.index), parts, addr, target: 'ma2' };
+          });
+          const last = items.length ? items[items.length - 1].index : -1;
+          if (el && last + 1 < total) {
+            nodes.push({ item: new vscode.TreeItem(`${total - last - 1} more slots not shown`), path, parts: el.parts });
+          }
+          return nodes;
+        } catch (err) {
+          return [{ item: new vscode.TreeItem(`${err.message} (refresh to retry)`), path, error: true }];
+        }
+      }
       try {
         const r = await bridge.run(bridgeDir(), listLua(path), cfg().get('bridge.timeout'));
         if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
@@ -727,13 +755,24 @@ function activate(context) {
       }
     },
   };
+  const treeView = vscode.window.createTreeView('ma3.objects', { treeDataProvider: objectTree });
+  treeView.description = 'grandMA3';
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('ma3.objects', objectTree),
+    treeView,
     vscode.commands.registerCommand('ma3.objects.refresh', () => treeChanged.fire()),
+    vscode.commands.registerCommand('ma3.objects.switch', (target) => {
+      treeTarget = target === 'ma2' || target === 'ma3' ? target : treeTarget === 'ma3' ? 'ma2' : 'ma3';
+      treeView.description = treeTarget === 'ma2' ? 'grandMA2' : 'grandMA3';
+      treeChanged.fire();
+      return treeTarget;
+    }),
     vscode.commands.registerCommand('ma3.objects.copyPath', async (el) => {
       if (!el || !el.path) return;
-      await vscode.env.clipboard.writeText(luaPath(el.path));
-      vscode.window.setStatusBarMessage(`Copied ${luaPath(el.path)}`, 3000);
+      const text = el.target === 'ma2' ? (el.addr ? ma2Lua(el.addr) : null) : luaPath(el.path);
+      if (!text) return vscode.window.showWarningMessage('This object has no pool number, so it has no address.');
+      await vscode.env.clipboard.writeText(text);
+      vscode.window.setStatusBarMessage(`Copied ${text}`, 3000);
+      return text;
     }),
     vscode.commands.registerCommand('ma3.objects.copyAddress', async (el) => {
       if (!el || !el.addr) return;
@@ -743,7 +782,9 @@ function activate(context) {
     vscode.commands.registerCommand('ma3.objects.insertPath', async (el) => {
       const editor = vscode.window.activeTextEditor;
       if (!el || !el.path || !editor) return;
-      await editor.edit((b) => b.insert(editor.selection.active, luaPath(el.path)));
+      const text = el.target === 'ma2' ? (el.addr ? ma2Lua(el.addr) : null) : luaPath(el.path);
+      if (!text) return vscode.window.showWarningMessage('This object has no pool number, so it has no address.');
+      await editor.edit((b) => b.insert(editor.selection.active, text));
     })
   );
 
