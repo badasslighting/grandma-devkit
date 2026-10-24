@@ -42,6 +42,10 @@
       { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
       { "command": "ma3.telnet.send", "title": "Send Command to Console (Telnet)", "category": "grandMA" },
       { "command": "ma3.telnet.sendSelection", "title": "Send Selected Lines to Console as Commands (Telnet)", "category": "grandMA" },
+      { "command": "ma3.osc.send", "title": "Send Command to Console (OSC)", "category": "grandMA" },
+      { "command": "ma3.osc.sendSelection", "title": "Send Selected Lines to Console as Commands (OSC)", "category": "grandMA" },
+      { "command": "ma3.osc.setup", "title": "Enable OSC Command Input on Console", "category": "grandMA" },
+      { "command": "ma3.osc.disable", "title": "Disable OSC Command Input on Console", "category": "grandMA" },
       { "command": "ma3.telnet.setPassword", "title": "Set Telnet Password", "category": "grandMA" },
       { "command": "ma3.telnet.monitor", "title": "Start Console Monitor (Telnet)", "category": "grandMA" },
       { "command": "ma3.telnet.stopMonitor", "title": "Stop Console Monitor", "category": "grandMA" },
@@ -102,9 +106,30 @@
         },
         "ma3.deployAndRun.via": {
           "type": "string",
-          "enum": ["auto", "bridge", "telnet"],
+          "enum": ["auto", "bridge", "telnet", "osc"],
           "default": "auto",
-          "markdownDescription": "How **Deploy and Reload on Console** reaches grandMA2: `auto` uses the LuaBridge when it is running and Telnet otherwise."
+          "markdownDescription": "How **Deploy and Reload on Console** reaches the console: `auto` uses the LuaBridge when it is running, and otherwise Telnet (grandMA2) or OSC (grandMA3). OSC gives no confirmation."
+        },
+        "ma3.osc.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host of the grandMA3 console's OSC input."
+        },
+        "ma3.osc.port": {
+          "type": "number",
+          "default": 8000,
+          "description": "UDP port of OSC line 1 on the console."
+        },
+        "ma3.osc.prefix": {
+          "type": "string",
+          "default": "",
+          "description": "Prefix of OSC line 1 on the console; commands go to /<prefix>/cmd, or /cmd when empty."
+        },
+        "ma3.osc.gapMs": {
+          "type": "number",
+          "default": 250,
+          "minimum": 50,
+          "description": "Pause between OSC commands in milliseconds."
         },
         "ma3.bridge.slot": {
           "type": "number",

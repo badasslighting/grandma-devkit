@@ -11,6 +11,7 @@ const { SCHEMA, SCHEMA_MA2, schemaFor, rootOf, isMa2, contextAt, valuesFor } = r
 const { luaTemplate, xmlTemplate, ma2LuaTemplate, ma2XmlTemplate, validName } = require('./lib/templates');
 const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifest, deploy, reloadLua, reloadLuaMa2, reloadCommands, importCollisions } = require('./lib/deploy');
 const { openSession, listen } = require('./lib/telnet');
+const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget } = require('./lib/target');
 const { bumpVersion, zip } = require('./lib/release');
@@ -406,6 +407,10 @@ function activate(context) {
         warnCollisions(ma2PluginsFolder(), name);
         return sendLines(reloadCommands('ma2', name, slot));
       }
+      if (!ma2 && (via === 'osc' || (via === 'auto' && !bridge.status(bridgeDirFor('ma3')).running))) {
+        output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot} (grandMA3, OSC)`);
+        return sendOsc(reloadCommands('ma3', name, slot));
+      }
       output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}${ma2 ? ' (grandMA2)' : ''}`);
       try {
         const code = ma2 ? reloadLuaMa2(name, slot) : reloadLua(name, slot);
@@ -623,7 +628,7 @@ function activate(context) {
   );
 
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
-  const telnetOut = vscode.window.createOutputChannel('grandMA Telnet');
+  const telnetOut = vscode.window.createOutputChannel('grandMA Console');
   context.subscriptions.push(telnetOut);
   const telnetOptions = async () => ({
     host: cfg().get('telnet.host'),
@@ -750,7 +755,28 @@ function activate(context) {
       } catch (err) {
         return vscode.window.showErrorMessage(`Could not copy the LuaBridge plugin: ${err.message}`);
       }
-      if (!ma2) return vscode.window.showInformationMessage(`LuaBridge copied to ${dest}. Import it from the plugin pool (User library) and tap it to start.`);
+      if (!ma2) {
+        if (bridge.status(bridgeDirFor('ma3')).running) {
+          vscode.window.showInformationMessage(`LuaBridge files updated in ${dest}; the bridge is already running.`);
+          return true;
+        }
+        // grandMA3 has no Telnet; OSC can import and start the plugin if OSC command input is already on.
+        const pick = opts.osc ? 'Import over OSC' : await vscode.window.showInformationMessage(`LuaBridge copied to ${dest}. Import and start it over OSC (needs OSC command input already on), or do it by hand from the plugin pool?`, 'Import over OSC', 'By hand');
+        if (pick !== 'Import over OSC') return null;
+        const slot = opts.slot || (await vscode.window.showInputBox({ prompt: 'Plugin pool slot to import LuaBridge into (overwrites that slot)', value: String(cfg().get('bridge.slot') || 99), validateInput: (v) => (/^\d+$/.test(v) ? null : 'A slot number') }));
+        if (!slot) return null;
+        const sent = await sendOsc(reloadCommands('ma3', 'LuaBridge', slot), { note: false });
+        if (!sent) return null;
+        for (let i = 0; i < 30; i++) {
+          if (bridge.status(bridgeDirFor('ma3')).running) {
+            vscode.window.showInformationMessage('LuaBridge is running; Run on Console now works for grandMA3.');
+            return true;
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        vscode.window.showWarningMessage('Commands sent, but no LuaBridge heartbeat yet. OSC gives no confirmation: check that OSC command input is on (Enable OSC Command Input on Console needs the bridge, so enable it by hand the first time) and look in the plugin pool.');
+        return false;
+      }
       // Importing again would restart the bridge (and, with a stray backup file around, add duplicates), so leave a running one alone.
       if (!opts.force && bridge.status(bridgeDirFor('ma2')).running) {
         vscode.window.showInformationMessage('LuaBridge_MA2 files updated; the bridge is already running. Re-import it (or pass force) to load the new copy.');
@@ -772,6 +798,84 @@ function activate(context) {
       vscode.window.showWarningMessage('Imported and started, but no LuaBridge heartbeat yet. Check the plugin in the pool and the System Monitor.');
       return false;
     })
+  );
+
+  // ---- OSC to the grandMA3 command line (/cmd over UDP; the console never answers)
+  const oscOptions = () => ({ host: cfg().get('osc.host'), port: cfg().get('osc.port'), prefix: cfg().get('osc.prefix'), gapMs: cfg().get('osc.gapMs') });
+  // Sends commands and reports in the OSC panel. UDP gives no confirmation, so say what could not be checked.
+  async function sendOsc(commands, { note = true } = {}) {
+    const out = telnetOut;
+    out.show(true);
+    try {
+      const opts = oscOptions();
+      let status = null;
+      const dir = bridgeDirFor('ma3');
+      if (bridge.status(dir).running) {
+        const r = await bridge.run(dir, oscStatusLua(), cfg().get('bridge.timeout'));
+        status = r.ok ? parseOscStatus(r.returns) : null;
+        if (status && !status.ready) {
+          out.appendLine('osc: the console has OSC command input off; run "Enable OSC Command Input on Console" first.');
+          vscode.window.showWarningMessage('OSC command input is off on the console. Run "Enable OSC Command Input on Console" first.');
+          return 0;
+        }
+      }
+      for (const c of commands) out.appendLine(`> osc ${opts.host}:${opts.port} ${c}`);
+      const n = await sendCommands(commands, opts);
+      if (note) out.appendLine(`  sent ${n} command${n === 1 ? '' : 's'} (OSC has no reply${status ? '' : '; the bridge is not running, so OSC input could not be checked'}).`);
+      return n;
+    } catch (err) {
+      out.appendLine(`osc error: ${err.message}`);
+      vscode.window.showErrorMessage(`OSC failed: ${err.message}`);
+      return 0;
+    }
+  }
+  const oscStatusText = (s) => (s ? `input ${s.enabled ? 'on' : 'off'}, accepts ${s.preferredIp}, port ${s.port}, line 1 commands ${s.receiveCommand ? 'on' : 'off'}${s.prefix ? `, prefix ${s.prefix}` : ''}` : 'unreadable');
+  async function oscConsole(luaFor, title) {
+    const dir = bridgeDirFor('ma3');
+    if (!bridge.status(dir).running) return vscode.window.showWarningMessage('The LuaBridge must be running on the grandMA3 console to change its OSC settings.');
+    const r = await bridge.run(dir, luaFor(), cfg().get('bridge.timeout'));
+    if (!r.ok) return vscode.window.showErrorMessage(`${title} failed: ${String(r.error).split('\n')[0]}`);
+    const s = parseOscStatus(r.returns);
+    telnetOut.appendLine(`osc: ${oscStatusText(s)}`);
+    vscode.window.showInformationMessage(`OSC on the console: ${oscStatusText(s)}.`);
+    return s;
+  }
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.osc.send', async (cmdArg) => {
+      const cmd = typeof cmdArg === 'string' ? cmdArg : await vscode.window.showInputBox({ prompt: 'grandMA3 command line command (sent over OSC)', placeHolder: 'Go+ Executor 1' });
+      if (!cmd || !cmd.trim()) return 0;
+      if (!(await confirmRisky([cmd]))) return 0;
+      return sendOsc([cmd.trim()]);
+    }),
+    vscode.commands.registerCommand('ma3.osc.sendSelection', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return 0;
+      const sel = editor.selection;
+      const text = sel.isEmpty ? editor.document.lineAt(sel.active.line).text : editor.document.getText(sel);
+      const cmds = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^(--|#)/.test(l));
+      if (!cmds.length) return vscode.window.showWarningMessage('No command lines selected.');
+      if (cmds.length > 1) {
+        const pick = await vscode.window.showWarningMessage(`Send ${cmds.length} lines to the console as commands over OSC?`, { modal: true }, 'Send');
+        if (pick !== 'Send') return 0;
+      }
+      if (!(await confirmRisky(cmds))) return 0;
+      return sendOsc(cmds);
+    }),
+    vscode.commands.registerCommand('ma3.osc.setup', async (opts = {}) => {
+      if (!opts.yes) {
+        const pick = await vscode.window.showWarningMessage(
+          'Turn on OSC command input on the grandMA3 console?',
+          {
+            modal: true,
+            detail: 'This switches OSC input on, accepts the 127.0.0.0/8 range and lets OSC line 1 run /cmd messages. The console then listens on UDP port 8000 on all network interfaces, so other machines on the network can send it commands (including Lua) unless a firewall blocks the port. Use it on onPC with a throwaway show.',
+          },
+          'Enable'
+        );
+        if (pick !== 'Enable') return null;
+      }
+      return oscConsole(() => oscSetupLua(), 'OSC setup');
+    }),
+    vscode.commands.registerCommand('ma3.osc.disable', () => oscConsole(oscDisableLua, 'Disabling OSC'))
   );
 
   // ---- refresh API from a HelpLua dump

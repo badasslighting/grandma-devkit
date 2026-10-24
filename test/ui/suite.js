@@ -234,6 +234,69 @@ testMa3('Deploy and Reload on Console imports and starts a plugin in a pool slot
   }
 });
 
+// OSC on grandMA3 onPC: switches OSC command input on, sends /cmd, reads the effect back through the
+// bridge, then switches OSC input off again (the console's usual state).
+testMa3('OSC: setup, send a command, and disable again (grandMA3)', async () => {
+  const bridge = require('../../lib/bridge');
+  const { oscStatusLua, parseOscStatus } = require('../../lib/osc');
+  const dir = bridge.defaultBridgeDir();
+  const run = (code) => bridge.run(dir, code, 5);
+  const status = async () => parseOscStatus((await run(oscStatusLua())).returns);
+  try {
+    const on = await vscode.commands.executeCommand('ma3.osc.setup', { yes: true });
+    assert.ok(on && on.ready, `OSC ready after setup: ${JSON.stringify(on)}`);
+    await sleep(800);
+    await run("SetVar(GlobalVars(), 'DEVKIT_OSC', '')");
+    const sent = await vscode.commands.executeCommand('ma3.osc.send', `Lua "SetVar(GlobalVars(), 'DEVKIT_OSC', 'via-osc')"`);
+    assert.strictEqual(sent, 1);
+    const seen = await until(async () => {
+      const r = await run("return tostring((GetVar(GlobalVars(), 'DEVKIT_OSC')))");
+      return /via-osc/.test(r.returns[0]) ? r.returns[0] : '';
+    }, 'the OSC command to run', 8000);
+    assert.match(seen, /via-osc/);
+  } finally {
+    await vscode.commands.executeCommand('ma3.osc.disable');
+    await run("SetVar(GlobalVars(), 'DEVKIT_OSC', '')");
+  }
+  const off = await status();
+  assert.ok(!off.enabled && !off.receiveCommand, `OSC off again: ${JSON.stringify(off)}`);
+});
+
+// Stops the bridge, then starts it again from nothing using only OSC: copy, import into a free slot, call.
+// Afterwards the temporary slot is deleted and the original LuaBridge slot is called to bring the bridge back.
+testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', async () => {
+  const bridge = require('../../lib/bridge');
+  const { sendCommands } = require('../../lib/osc');
+  const dir = bridge.defaultBridgeDir();
+  const run = (code) => bridge.run(dir, code, 5);
+  const slot = 97;
+  const names = await run(`local p = Root().ShowData.DataPools[1].Plugins local s = p[${slot}] local o = 'none' for _, c in ipairs(p:Children()) do if c.name == 'LuaBridge' and c.no ~= ${slot} then o = c.no end end return (s and s.name or 'free') .. '|' .. tostring(o)`);
+  const [slotState, original] = JSON.parse(names.returns[0]).split('|');
+  assert.strictEqual(slotState, 'free', `slot ${slot} must be free in the test show`);
+  assert.notStrictEqual(original, 'none', 'the running LuaBridge plugin has a pool slot to restore');
+  const restore = async () => {
+    await sendCommands([`Call Plugin ${original}`], { port: 8000 });
+    await until(() => bridge.status(dir).running, 'the original bridge to come back', 15000);
+  };
+  try {
+    await vscode.commands.executeCommand('ma3.osc.setup', { yes: true });
+    await sleep(800);
+    await bridge.stop(dir);
+    await until(() => !bridge.status(dir).running, 'the bridge to stop', 12000);
+    const ok = await vscode.commands.executeCommand('ma3.installBridge', { target: 'ma3', osc: true, slot });
+    assert.strictEqual(ok, true, 'a new heartbeat after the OSC install');
+  } finally {
+    if (bridge.status(dir).running) {
+      await run(`Cmd('Delete Plugin ${slot} /nc')`).catch(() => {});
+      await until(() => !bridge.status(dir).running, 'the temporary bridge to stop', 12000).catch(() => {});
+    }
+    await restore().catch(() => {});
+    await sendCommands(['Delete Plugin ' + slot + ' /nc'], { port: 8000 }).catch(() => {});
+    await vscode.commands.executeCommand('ma3.osc.disable').catch(() => {});
+  }
+  assert.ok(bridge.status(dir).running, 'the original bridge is running again');
+});
+
 test('contributed settings have the declared defaults', async () => {
   const cfg = vscode.workspace.getConfiguration('ma3');
   assert.strictEqual(cfg.get('bridge.timeout'), 2);
