@@ -297,6 +297,22 @@ testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', as
   assert.ok(bridge.status(dir).running, 'the original bridge is running again');
 });
 
+test('Set Up Lua Language Server Definitions writes the stubs and links them from .luarc.json', async () => {
+  const stubs = path.join(ws, '.vscode', 'grandma-stubs');
+  const luarc = path.join(ws, '.luarc.json');
+  try {
+    const r = await vscode.commands.executeCommand('ma3.setupLanguageServer');
+    assert.ok(r && r.luarc, 'luarc written');
+    for (const f of ['grandma3.lua', 'grandma2.lua']) assert.ok(fs.statSync(path.join(stubs, f)).size > 1000, `${f} written`);
+    assert.match(fs.readFileSync(path.join(stubs, 'grandma3.lua'), 'utf8'), /function Printf\(/);
+    const cfg = JSON.parse(fs.readFileSync(luarc, 'utf8'));
+    assert.deepStrictEqual(cfg['workspace.library'], ['./.vscode/grandma-stubs']);
+  } finally {
+    fs.rmSync(stubs, { recursive: true, force: true });
+    fs.rmSync(luarc, { force: true });
+  }
+});
+
 test('contributed settings have the declared defaults', async () => {
   const cfg = vscode.workspace.getConfiguration('ma3');
   assert.strictEqual(cfg.get('bridge.timeout'), 2);
