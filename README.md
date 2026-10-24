@@ -9,7 +9,12 @@ Unofficial community tool, not affiliated with or endorsed by MA Lighting. grand
 - **grandMA3: Deploy Plugin to Plugins Folder** copies the manifest and the Lua files it names to the console's plugins folder (`ma3.pluginsPath`; defaults to the onPC folder on Windows). `ma3.deployOnSave` does it on every save.
 - **grandMA3: Copy Import Command for Plugin** copies `Import Plugin Library "Name" At Plugin N /nc`.
 - **grandMA3: Run File or Selection on Console** runs the file (or the selected lines) in grandMA3 onPC through the LuaBridge plugin and prints return values, `Printf`/`Echo` output and errors to the **grandMA3** output panel. A Lua error is also marked on its editor line. Start the LuaBridge plugin on the console first; **LuaBridge Status** checks its heartbeat and **LuaBridge: Clear Globals** drops what earlier runs left behind. Settings: `ma3.bridge.dir` (default `%ProgramData%/MA3/luabridge`) and `ma3.bridge.timeout` (CPU seconds, default 2; the console UI is frozen that long). Use it on onPC with a throwaway show: anything that can write the bridge folder can run Lua in grandMA3.
-- **Checks**: manifest problems (missing DataVersion, Name or Lua file, no top-level `return`) and `while true do` loops that never yield, break or return.
+- **Deploy and Reload on Console** saves, deploys, and (with `ma3.deployAndRun.slot` set) re-imports the plugin into that plugin pool slot and starts it through the LuaBridge plugin. Use it on onPC with a throwaway show: the slot is overwritten.
+- **Command-string completion**: inside `Cmd("...")`, `CmdIndirect` and `CmdIndirectWait` strings, complete console keywords (`Go+`, `Store`, `Sequence`, `At`, `Thru`, `/nc`...). With the LuaBridge running, it also completes real group, sequence, macro, preset, layout and timer numbers with their labels from the show (`ma3.liveCompletion`, refreshed at most once a minute; **Refresh Show Objects for Completion** forces it).
+- **grandMA3 Objects view** (Explorer sidebar): browse the console object tree (`Root()` and below) through the bridge. Right-click an object to copy its Lua path (`Root()[14][14]`), copy its address (`14.14`) or insert the path at the cursor.
+- **Manifest support**: element, attribute and `DataVersion` completion and hover in plugin `.xml` files, plus checks for unknown elements and attributes and malformed versions.
+- **Bump Version and Package Plugin (zip)** raises the manifest `Version` (patch, minor or major) and zips the manifest and its Lua files into `dist/`.
+- **Checks**: manifest problems (missing DataVersion, Name or Lua file, no top-level `return`, unknown elements or attributes), `while true do` loops that never yield, break or return, and these Lua warnings: a misspelt API function (`printf` for `Printf`), an API function called with no arguments, `Cmd()` inside a loop, and heavy calls (`ObjectList`, `:Children()`, `CmdIndirectWait`) inside a `Timer` or `HookObjectChange` callback. `ma3.lint.globals` adds a hint for assignments without `local`.
 - Snippets: `ma3plugin`, `cmd`, `printf`, `forchildren`, `pcall`, `yield`.
 
 Lua language features (syntax, linting) come from the bundled `sumneko.lua` pack.
@@ -23,4 +28,4 @@ npm run build-api  # rebuild data/api.json from the local HelpLua file
 npm run package    # build the .vsix
 ```
 
-Not covered yet: enum completion, redeploy-and-run in one step, live-show completion, grandMA2.
+Not covered yet: `Enums.*` completion, attribute-name completion, grandMA2.

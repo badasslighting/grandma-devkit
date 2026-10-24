@@ -50,6 +50,50 @@ test('extension activates and registers the bridge commands', async () => {
   for (const c of ['ma3.runOnConsole', 'ma3.bridgeStatus', 'ma3.bridgeReset']) assert.ok(cmds.includes(c), `${c} registered`);
 });
 
+test('0.3 commands are registered', async () => {
+  const cmds = await vscode.commands.getCommands(true);
+  for (const c of ['ma3.deployAndRun', 'ma3.packagePlugin', 'ma3.refreshShow', 'ma3.objects.refresh', 'ma3.objects.copyPath']) assert.ok(cmds.includes(c), `${c} registered`);
+});
+
+test('Cmd strings complete console keywords and live show groups', async () => {
+  const { doc } = await openLua('cmd.lua', 'Cmd("Store Group ")\n');
+  await vscode.commands.executeCommand('ma3.refreshShow');
+  const pos = new vscode.Position(0, 17);
+  const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, pos);
+  const labels = list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
+  assert.ok(labels.includes('Fixture'), 'object keywords offered after Store Group? (keyword list present)');
+  assert.ok(list.items.some((i) => /^Group: /.test(i.detail || '')), 'group numbers from the running show offered');
+  const outside = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 3));
+  assert.ok(!outside.items.some((i) => i.label === 'Fixture'), 'no command keywords outside the string');
+});
+
+test('lint flags a typo, Cmd in a loop and heavy work in a Timer callback', async () => {
+  const { doc } = await openLua('lint.lua', 'printf("x")\nfor i = 1, 3 do Cmd("Go+") end\nTimer(function() local l = ObjectList("Sequence 1") end, 1, 0)\nreturn 1\n');
+  const diags = await until(() => {
+    const d = vscode.languages.getDiagnostics(doc.uri);
+    return d.length >= 3 ? d : null;
+  }, 'lint diagnostics');
+  const codes = diags.map((d) => d.code).sort();
+  assert.deepStrictEqual(codes, ['cmd-in-loop', 'heavy-in-callback', 'unknown-api']);
+});
+
+test('manifest XML completes elements and attributes', async () => {
+  const file = path.join(ws, 'P.xml');
+  fs.writeFileSync(file, '<GMA3 DataVersion="2.0.0.0">\n\t<Plugin Name="P">\n\t\t<\n\t</Plugin>\n</GMA3>\n');
+  const doc = await vscode.workspace.openTextDocument(file);
+  await vscode.window.showTextDocument(doc);
+  const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(2, 3));
+  assert.ok(list.items.some((i) => i.label === 'ComponentLua'), 'ComponentLua offered inside Plugin');
+});
+
+test('object browser lists Root children through the bridge', async () => {
+  const bridge = require('../../lib/bridge');
+  const { listLua, parseList } = require('../../lib/objectTree');
+  const r = await bridge.run(bridge.defaultBridgeDir(), listLua([]), 2);
+  const { total, items } = parseList(r.returns);
+  assert.ok(total > 5 && items.some((i) => i.name === 'ShowData'), 'Root has ShowData');
+});
+
 test('contributed settings have the declared defaults', async () => {
   const cfg = vscode.workspace.getConfiguration('ma3');
   assert.strictEqual(cfg.get('bridge.timeout'), 2);
