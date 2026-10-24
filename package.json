@@ -30,6 +30,7 @@
     "commands": [
       { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA3" },
       { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA3" },
+      { "command": "ma3.newPluginMa2", "title": "New grandMA2 Plugin", "category": "grandMA3" },
       { "command": "ma3.packagePlugin", "title": "Bump Version and Package Plugin (zip)", "category": "grandMA3" },
       { "command": "ma3.deployAndRun", "title": "Deploy and Reload on Console", "category": "grandMA3" },
       { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA3" },
@@ -61,6 +62,27 @@
     "configuration": {
       "title": "MA3dev for VScode",
       "properties": {
+        "ma3.target": {
+          "type": "string",
+          "enum": ["auto", "ma3", "ma2"],
+          "default": "auto",
+          "markdownDescription": "Which console a Lua file is written for. `auto` picks grandMA2 when the code calls `gma.*` or the plugin's manifest is a grandMA2 one (`<MA ...>`), and grandMA3 otherwise."
+        },
+        "ma3.ma2.pluginsPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Folder grandMA2 loads plugin files from. Empty uses the newest `%ProgramData%/MA Lighting Technologies/grandma/gma2_V_<version>/plugins` on Windows."
+        },
+        "ma3.ma2.bridgeDir": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Folder the grandMA2 LuaBridge_MA2 plugin polls. Empty uses `%ProgramData%/MA2/luabridge` (or the `MA2_LUABRIDGE_DIR` environment variable). Use onPC with a throwaway show."
+        },
+        "ma3.ma2.version": {
+          "type": "string",
+          "default": "3.9.61",
+          "description": "grandMA2 software version written into new grandMA2 plugin manifests (major.minor.stream)."
+        },
         "ma3.pluginsPath": {
           "type": "string",
           "default": "",

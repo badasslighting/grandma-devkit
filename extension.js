@@ -7,19 +7,54 @@ const { snippetFor, hoverMarkdown, buildIndex, activeCall } = require('./lib/api
 const { findBlockingLoops } = require('./lib/lint');
 const { lintRules } = require('./lib/rules');
 const { checkManifest } = require('./lib/manifest');
-const { SCHEMA, contextAt, valuesFor } = require('./lib/manifestSchema');
-const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
-const { defaultPluginsPath, filesForManifest, findManifest, deploy, reloadLua } = require('./lib/deploy');
+const { SCHEMA, SCHEMA_MA2, schemaFor, rootOf, isMa2, contextAt, valuesFor } = require('./lib/manifestSchema');
+const { luaTemplate, xmlTemplate, ma2LuaTemplate, ma2XmlTemplate, validName } = require('./lib/templates');
+const { defaultPluginsPath, defaultMa2PluginsPath, filesForManifest, findManifest, deploy, reloadLua, reloadLuaMa2 } = require('./lib/deploy');
+const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
+const { detectTarget } = require('./lib/target');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
 const bridge = require('./lib/bridge');
-const { defaultBridgeDir } = bridge;
+const { defaultBridgeDir, defaultBridgeDirMa2 } = bridge;
 
 const LUA = { language: 'lua' };
 const cfg = () => vscode.workspace.getConfiguration('ma3');
 const pluginsFolder = () => cfg().get('pluginsPath') || defaultPluginsPath();
+const ma2PluginsFolder = () => cfg().get('ma2.pluginsPath') || defaultMa2PluginsPath();
+const bridgeDirFor = (target) => (target === 'ma2' ? cfg().get('ma2.bridgeDir') || defaultBridgeDirMa2() : cfg().get('bridge.dir') || defaultBridgeDir());
+
+// Which console a Lua document targets: the ma3.target setting, `gma.` calls in the code, or the
+// manifest next to it (looked up at most every few seconds).
+const manifestHint = new Map();
+function targetOf(doc) {
+  const text = doc.getText();
+  const setting = cfg().get('target');
+  const quick = detectTarget(text, setting);
+  if (setting !== 'auto' || quick === 'ma2' || doc.isUntitled) return quick;
+  const dir = path.dirname(doc.fileName);
+  const hit = manifestHint.get(dir);
+  if (!hit || Date.now() - hit.at > 3000) {
+    let xml = '';
+    try {
+      const m = findManifest(doc.fileName);
+      xml = m ? fs.readFileSync(m, 'utf8') : '';
+    } catch (_) {
+      /* no manifest */
+    }
+    manifestHint.set(dir, { at: Date.now(), xml });
+    return detectTarget(text, setting, xml);
+  }
+  return detectTarget(text, setting, hit.xml);
+}
+const manifestIsMa2 = (manifest) => {
+  try {
+    return isMa2(fs.readFileSync(manifest, 'utf8'));
+  } catch (_) {
+    return false;
+  }
+};
 
 function loadApi(context) {
   const custom = path.join(context.globalStorageUri.fsPath, 'api.json');
@@ -82,8 +117,9 @@ function activate(context) {
               item.sortText = `${k.rank}${k.name}`;
               return item;
             });
-            // Real object numbers and labels from the running show, when the bridge is up.
-            for (const o of showSuggestions(str.text, await getShow())) {
+            // Real object numbers and labels from the running show, when the bridge is up (grandMA3 only).
+            const live = targetOf(doc) === 'ma3' ? await getShow() : null;
+            for (const o of showSuggestions(str.text, live)) {
               const item = new vscode.CompletionItem(o.no, vscode.CompletionItemKind.Value);
               item.detail = `${o.kind}: ${o.name}`;
               item.filterText = `${o.no} ${o.name}`;
@@ -93,9 +129,27 @@ function activate(context) {
             }
             return items;
           }
+          const ma2 = memberContext(before);
+          if (ma2) {
+            return members(ma2.prefix).map((m) => {
+              const item = new vscode.CompletionItem(m.name, m.fn ? vscode.CompletionItemKind.Function : vscode.CompletionItemKind.Module);
+              if (m.fn) {
+                item.detail = m.fn.signature;
+                item.documentation = new vscode.MarkdownString(`${m.fn.doc}\n\n_grandMA2 Lua API._`);
+                const req = m.fn.params.filter((p) => !p.optional).map((p, i) => `\${${i + 1}:${p.name}}`).join(', ');
+                item.insertText = new vscode.SnippetString(`${m.name}(${req})`);
+              }
+              return item;
+            });
+          }
           const isMethod = /:\s*[A-Za-z_]*$/.test(before);
           const isMember = /\.\s*[A-Za-z_]*$/.test(before);
           if (isMember) return [];
+          if (targetOf(doc) === 'ma2') {
+            const g = new vscode.CompletionItem('gma', vscode.CompletionItemKind.Module);
+            g.detail = 'grandMA2 Lua API';
+            return isMethod ? [] : [g];
+          }
           const entries = isMethod ? index.api.object : index.api.global;
           return entries.map((fn) => {
             const item = new vscode.CompletionItem(fn.name, vscode.CompletionItemKind.Function);
@@ -106,36 +160,41 @@ function activate(context) {
           });
         },
       },
-      ':'
+      ':',
+      '.'
     )
   );
 
   // ---- plugin manifest (.xml) completion and hover
   const XML = { language: 'xml' };
-  const isManifest = (doc) => /<GMA3\b/.test(doc.getText()) || doc.getText().trim() === '';
+  const isManifest = (doc) => /<(GMA3|MA)\b/.test(doc.getText()) || doc.getText().trim() === '';
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
       XML,
       {
         provideCompletionItems(doc, pos) {
           if (!isManifest(doc)) return [];
+          const text = doc.getText();
+          const schema = schemaFor(text);
           const ctx = contextAt(doc.getText(new vscode.Range(0, 0, pos.line, pos.character)));
           const range = (n) => new vscode.Range(pos.line, pos.character - n, pos.line, pos.character);
           if (ctx.kind === 'element') {
-            const names = ctx.parent ? (SCHEMA[ctx.parent] || { children: [] }).children : ['GMA3'];
+            // A fresh file offers both roots; once a root exists, only that console's elements.
+            const empty = text.trim() === '' || !/<(GMA3|MA)\b/.test(text);
+            const names = ctx.parent ? (schema[ctx.parent] || { children: [] }).children : empty ? ['GMA3', 'MA'] : [rootOf(text)];
             return names.map((n) => {
+              const spec = schema[n] || SCHEMA_MA2[n] || SCHEMA[n] || {};
               const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.Struct);
-              item.documentation = SCHEMA[n].doc;
+              item.documentation = spec.doc;
               item.range = range(ctx.partial.length);
-              const attrs = Object.keys(SCHEMA[n].attrs).filter((a) => /^[A-Z]/.test(a) && (n !== 'Plugin' || a !== 'Author'));
-              const body = attrs.map((a, i) => `${a}="\${${i + 1}}"`).join(' ');
-              const close = SCHEMA[n].children.length ? `>\n\t$0\n</${n}>` : ' />';
+              const body = (spec.snippet || []).map((a, i) => `${a}="\${${i + 1}}"`).join(' ');
+              const close = (spec.children || []).length ? `>\n\t$0\n</${n}>` : ' />';
               item.insertText = new vscode.SnippetString(`${n}${body ? ' ' + body : ''}${close}`);
               return item;
             });
           }
-          if (ctx.kind === 'attribute' && SCHEMA[ctx.element]) {
-            return Object.entries(SCHEMA[ctx.element].attrs)
+          if (ctx.kind === 'attribute' && schema[ctx.element]) {
+            return Object.entries(schema[ctx.element].attrs)
               .filter(([a]) => !ctx.used.includes(a))
               .map(([a, d]) => {
                 const item = new vscode.CompletionItem(a, vscode.CompletionItemKind.Property);
@@ -165,10 +224,11 @@ function activate(context) {
         const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_][\w.-]*/);
         if (!range) return null;
         const word = doc.getText(range);
+        const schema = schemaFor(doc.getText());
         const ctx = contextAt(doc.getText(new vscode.Range(0, 0, pos.line, range.end.character)));
-        if (ctx.kind === 'element' && SCHEMA[word]) return new vscode.Hover(new vscode.MarkdownString(`**<${word}>** ${SCHEMA[word].doc}`), range);
-        if (ctx.kind === 'attribute' && SCHEMA[ctx.element] && SCHEMA[ctx.element].attrs[word])
-          return new vscode.Hover(new vscode.MarkdownString(`**${word}** ${SCHEMA[ctx.element].attrs[word]}`), range);
+        if (ctx.kind === 'element' && schema[word]) return new vscode.Hover(new vscode.MarkdownString(`**<${word}>** ${schema[word].doc}`), range);
+        if (ctx.kind === 'attribute' && schema[ctx.element] && schema[ctx.element].attrs[word])
+          return new vscode.Hover(new vscode.MarkdownString(`**${word}** ${schema[ctx.element].attrs[word]}`), range);
         return null;
       },
     })
@@ -180,6 +240,12 @@ function activate(context) {
       provideHover(doc, pos) {
         const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_]\w*/);
         if (!range) return null;
+        const gmaPath = pathAt(doc.lineAt(pos).text, range.end.character);
+        const gmaFn = gmaPath && BY_PATH.get(gmaPath);
+        if (gmaFn) {
+          const md = new vscode.MarkdownString(['```lua', gmaFn.signature, '```', '', gmaFn.doc, '', '_grandMA2 Lua API._'].join('\n'));
+          return new vscode.Hover(md, range);
+        }
         const word = doc.getText(range);
         const before = doc.lineAt(pos).text.slice(0, range.start.character);
         const isMethod = /:\s*$/.test(before);
@@ -196,6 +262,17 @@ function activate(context) {
       {
         provideSignatureHelp(doc, pos) {
           const before = doc.lineAt(pos).text.slice(0, pos.character);
+          const gmaCall = activeCallPath(before);
+          const gmaFn = gmaCall && BY_PATH.get(gmaCall.path);
+          if (gmaFn) {
+            const sig = new vscode.SignatureInformation(gmaFn.signature, new vscode.MarkdownString(gmaFn.doc));
+            sig.parameters = gmaFn.params.map((p) => new vscode.ParameterInformation(p.optional ? `[${p.name}]` : p.name));
+            const help = new vscode.SignatureHelp();
+            help.signatures = [sig];
+            help.activeSignature = 0;
+            help.activeParameter = Math.min(gmaCall.argIndex, Math.max(0, gmaFn.params.length - 1));
+            return help;
+          }
           const call = activeCall(before);
           if (!call) return null;
           const isMethod = new RegExp(`:\\s*${call.name}\\s*\\(`).test(before);
@@ -231,7 +308,7 @@ function activate(context) {
         );
       }
       const sev = { warning: vscode.DiagnosticSeverity.Warning, hint: vscode.DiagnosticSeverity.Hint };
-      for (const f of lintRules(doc.getText(), index.api, { globals: cfg().get('lint.globals') })) {
+      for (const f of lintRules(doc.getText(), index.api, { globals: cfg().get('lint.globals'), target: targetOf(doc) })) {
         const d = new vscode.Diagnostic(lineRange(f.line), f.message, sev[f.severity]);
         d.code = f.rule;
         found.push(d);
@@ -257,13 +334,14 @@ function activate(context) {
     try {
       const manifest = findManifest(file);
       if (!manifest) throw new Error('No XML manifest in this folder names this file.');
-      const copied = deploy(manifest, pluginsFolder());
+      const ma2 = manifestIsMa2(manifest);
+      const copied = deploy(manifest, ma2 ? ma2PluginsFolder() : pluginsFolder());
       const msg = `Deployed ${copied.length} file(s) to ${path.dirname(copied[0])}`;
       if (quiet) vscode.window.setStatusBarMessage(msg, 3000);
       else vscode.window.showInformationMessage(msg);
       return manifest;
     } catch (err) {
-      vscode.window.showErrorMessage(`grandMA3 deploy failed: ${err.message}`);
+      vscode.window.showErrorMessage(`Deploy failed: ${err.message}`);
       return null;
     }
   }
@@ -277,13 +355,16 @@ function activate(context) {
       const slot = cfg().get('deployAndRun.slot');
       if (!slot) return vscode.window.showInformationMessage('Deployed. Set ma3.deployAndRun.slot to also re-import and start the plugin on the console.');
       output.show(true);
-      output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}`);
+      const ma2 = manifestIsMa2(manifest);
+      output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}${ma2 ? ' (grandMA2)' : ''}`);
       try {
-        const r = await bridge.run(bridgeDir(), reloadLua(path.basename(manifest, path.extname(manifest)), slot), cfg().get('bridge.timeout'));
+        const name = path.basename(manifest, path.extname(manifest));
+        const code = ma2 ? reloadLuaMa2(name, slot) : reloadLua(name, slot);
+        const r = await bridge.run(bridgeDirFor(ma2 ? 'ma2' : 'ma3'), code, cfg().get('bridge.timeout'));
         output.appendLine(bridge.formatResult(r));
       } catch (err) {
         output.appendLine(`bridge error: ${err.message}`);
-        vscode.window.showErrorMessage(`grandMA3 reload failed: ${err.message}`);
+        vscode.window.showErrorMessage(`Reload failed: ${err.message}`);
       }
     }),
     vscode.commands.registerCommand('ma3.deploy', (uri) => {
@@ -308,9 +389,11 @@ function activate(context) {
       const file = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName;
       const manifest = file && findManifest(file);
       if (!manifest) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
-      const part =
-        partArg ||
-        (await vscode.window.showQuickPick(['patch', 'minor', 'major', 'none'], { placeHolder: 'Bump the plugin version before packaging?' }));
+      // grandMA2 manifests carry no plugin version, so there is nothing to bump.
+      const part = manifestIsMa2(manifest)
+        ? 'none'
+        : partArg ||
+          (await vscode.window.showQuickPick(['patch', 'minor', 'major', 'none'], { placeHolder: 'Bump the plugin version before packaging?' }));
       if (!part) return;
       try {
         await vscode.workspace.saveAll(false);
@@ -332,40 +415,42 @@ function activate(context) {
         const pick = await vscode.window.showInformationMessage(`Packaged ${files.length} files${note}: ${path.basename(out)}`, 'Reveal');
         if (pick === 'Reveal') vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(out));
       } catch (err) {
-        vscode.window.showErrorMessage(`grandMA3 package failed: ${err.message}`);
+        vscode.window.showErrorMessage(`Package failed: ${err.message}`);
       }
     })
   );
 
-  // ---- new plugin
+  // ---- new plugin (grandMA3 or grandMA2)
+  const newPlugin = (ma2) => async (nameArg) => {
+    const name =
+      typeof nameArg === 'string'
+        ? nameArg
+        : await vscode.window.showInputBox({
+            prompt: 'Plugin name (letters, digits, _ and -; becomes the file name)',
+            validateInput: (v) => (validName(v) ? null : 'Start with a letter; use only letters, digits, _ or -.'),
+          });
+    if (!name) return;
+    if (!validName(name)) return vscode.window.showErrorMessage(`"${name}" is not a valid plugin name.`);
+    const root = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (!root) return vscode.window.showWarningMessage('Open a folder first.');
+    const dir = vscode.Uri.joinPath(root.uri, name);
+    const luaUri = vscode.Uri.joinPath(dir, `${name}.lua`);
+    const xmlUri = vscode.Uri.joinPath(dir, `${name}.xml`);
+    try {
+      await vscode.workspace.fs.stat(dir);
+      return vscode.window.showErrorMessage(`${name} already exists in this workspace.`);
+    } catch (_) {
+      /* does not exist: good */
+    }
+    const enc = new TextEncoder();
+    await vscode.workspace.fs.createDirectory(dir);
+    await vscode.workspace.fs.writeFile(luaUri, enc.encode(ma2 ? ma2LuaTemplate(name) : luaTemplate(name)));
+    await vscode.workspace.fs.writeFile(xmlUri, enc.encode(ma2 ? ma2XmlTemplate(name, cfg().get('ma2.version')) : xmlTemplate(name, cfg().get('dataVersion'))));
+    await vscode.window.showTextDocument(luaUri);
+  };
   context.subscriptions.push(
-    vscode.commands.registerCommand('ma3.newPlugin', async (nameArg) => {
-      const name =
-        typeof nameArg === 'string'
-          ? nameArg
-          : await vscode.window.showInputBox({
-              prompt: 'Plugin name (letters, digits, _ and -; becomes the file name)',
-              validateInput: (v) => (validName(v) ? null : 'Start with a letter; use only letters, digits, _ or -.'),
-            });
-      if (!name) return;
-      if (!validName(name)) return vscode.window.showErrorMessage(`"${name}" is not a valid plugin name.`);
-      const root = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
-      if (!root) return vscode.window.showWarningMessage('Open a folder first.');
-      const dir = vscode.Uri.joinPath(root.uri, name);
-      const luaUri = vscode.Uri.joinPath(dir, `${name}.lua`);
-      const xmlUri = vscode.Uri.joinPath(dir, `${name}.xml`);
-      try {
-        await vscode.workspace.fs.stat(dir);
-        return vscode.window.showErrorMessage(`${name} already exists in this workspace.`);
-      } catch (_) {
-        /* does not exist: good */
-      }
-      const enc = new TextEncoder();
-      await vscode.workspace.fs.createDirectory(dir);
-      await vscode.workspace.fs.writeFile(luaUri, enc.encode(luaTemplate(name)));
-      await vscode.workspace.fs.writeFile(xmlUri, enc.encode(xmlTemplate(name, cfg().get('dataVersion'))));
-      await vscode.window.showTextDocument(luaUri);
-    })
+    vscode.commands.registerCommand('ma3.newPlugin', newPlugin(false)),
+    vscode.commands.registerCommand('ma3.newPluginMa2', newPlugin(true))
   );
 
   // ---- import command helper
@@ -391,7 +476,12 @@ function activate(context) {
   const output = vscode.window.createOutputChannel('grandMA3');
   const runDiagnostics = vscode.languages.createDiagnosticCollection('ma3-run');
   context.subscriptions.push(output, runDiagnostics);
-  const bridgeDir = () => cfg().get('bridge.dir') || defaultBridgeDir();
+  const bridgeDir = () => bridgeDirFor('ma3');
+  // Status and reset follow the active Lua file's console, and fall back to grandMA3.
+  const activeTarget = () => {
+    const ed = vscode.window.activeTextEditor;
+    return ed && ed.document.languageId === 'lua' ? targetOf(ed.document) : 'ma3';
+  };
 
   context.subscriptions.push(
     vscode.commands.registerCommand('ma3.runOnConsole', async () => {
@@ -404,7 +494,7 @@ function activate(context) {
       output.show(true);
       output.appendLine(`> run ${path.basename(editor.document.fileName)}${sel.isEmpty ? '' : ` (lines ${sel.start.line + 1}-${sel.end.line + 1})`}`);
       try {
-        const r = await bridge.run(bridgeDir(), code, cfg().get('bridge.timeout'));
+        const r = await bridge.run(bridgeDirFor(targetOf(editor.document)), code, cfg().get('bridge.timeout'));
         output.appendLine(bridge.formatResult(r));
         const line = r.ok ? null : bridge.errorLine(r.error, offset);
         if (line !== null) {
@@ -413,19 +503,21 @@ function activate(context) {
         }
       } catch (err) {
         output.appendLine(`bridge error: ${err.message}`);
-        vscode.window.showErrorMessage(`grandMA3 run failed: ${err.message}`);
+        vscode.window.showErrorMessage(`Run failed: ${err.message}`);
       }
     }),
     vscode.commands.registerCommand('ma3.bridgeStatus', () => {
-      const st = bridge.status(bridgeDir());
-      vscode.window.showInformationMessage(st.running ? `LuaBridge running (heartbeat ${st.ageS}s ago).` : `LuaBridge not running. ${st.reason || `Last heartbeat ${st.ageS}s ago.`}`);
+      const target = activeTarget();
+      const st = bridge.status(bridgeDirFor(target));
+      const which = target === 'ma2' ? 'LuaBridge (grandMA2)' : 'LuaBridge';
+      vscode.window.showInformationMessage(st.running ? `${which} running (heartbeat ${st.ageS}s ago).` : `${which} not running. ${st.reason || `Last heartbeat ${st.ageS}s ago.`}`);
     }),
     vscode.commands.registerCommand('ma3.bridgeReset', async () => {
       try {
-        await bridge.reset(bridgeDir());
+        await bridge.reset(bridgeDirFor(activeTarget()));
         vscode.window.setStatusBarMessage('LuaBridge globals cleared', 3000);
       } catch (err) {
-        vscode.window.showErrorMessage(`grandMA3 reset failed: ${err.message}`);
+        vscode.window.showErrorMessage(`Reset failed: ${err.message}`);
       }
     })
   );
