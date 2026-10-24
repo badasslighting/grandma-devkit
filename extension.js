@@ -9,7 +9,8 @@ const { lintRules } = require('./lib/rules');
 const { checkManifest } = require('./lib/manifest');
 const { SCHEMA, contextAt, valuesFor } = require('./lib/manifestSchema');
 const { luaTemplate, xmlTemplate, validName } = require('./lib/templates');
-const { defaultPluginsPath, findManifest, deploy, reloadLua } = require('./lib/deploy');
+const { defaultPluginsPath, filesForManifest, findManifest, deploy, reloadLua } = require('./lib/deploy');
+const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
@@ -297,6 +298,41 @@ function activate(context) {
         } catch (_) {
           /* unrelated file */
         }
+      }
+    })
+  );
+
+  // ---- bump version and zip a plugin for sharing
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.packagePlugin', async (partArg) => {
+      const file = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName;
+      const manifest = file && findManifest(file);
+      if (!manifest) return vscode.window.showWarningMessage('Open a plugin .lua or .xml file first.');
+      const part =
+        partArg ||
+        (await vscode.window.showQuickPick(['patch', 'minor', 'major', 'none'], { placeHolder: 'Bump the plugin version before packaging?' }));
+      if (!part) return;
+      try {
+        await vscode.workspace.saveAll(false);
+        let xml = fs.readFileSync(manifest, 'utf8');
+        let note = '';
+        if (part !== 'none') {
+          const bumped = bumpVersion(xml, part);
+          xml = bumped.xml;
+          fs.writeFileSync(manifest, xml);
+          note = ` (version ${bumped.from} -> ${bumped.to})`;
+        }
+        const version = (/<Plugin\b[^>]*?\bVersion="([^"]*)"/.exec(xml) || [])[1];
+        const name = path.basename(manifest, path.extname(manifest));
+        const files = filesForManifest(manifest).map((f) => ({ name: path.basename(f), data: fs.readFileSync(f) }));
+        const dist = path.join(path.dirname(manifest), 'dist');
+        fs.mkdirSync(dist, { recursive: true });
+        const out = path.join(dist, `${name}${version ? `-${version}` : ''}.zip`);
+        fs.writeFileSync(out, zip(files));
+        const pick = await vscode.window.showInformationMessage(`Packaged ${files.length} files${note}: ${path.basename(out)}`, 'Reveal');
+        if (pick === 'Reveal') vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(out));
+      } catch (err) {
+        vscode.window.showErrorMessage(`grandMA3 package failed: ${err.message}`);
       }
     })
   );

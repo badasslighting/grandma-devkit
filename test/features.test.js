@@ -64,3 +64,37 @@ test('show cache: parse the bridge return and suggest objects after a pool keywo
   assert.deepStrictEqual(showSuggestions('Group ', null), []);
   assert.match(showLua(), /d\.Groups/);
 });
+
+test('release: bumpVersion resets lower parts and rejects bad input', () => {
+  const { bumpVersion } = require('../lib/release');
+  const xml = '<GMA3><Plugin Name="X" Version="1.2.3"><ComponentLua Name="X" FileName="X.lua" /></Plugin></GMA3>';
+  assert.deepStrictEqual(bumpVersion(xml, 'minor').to, '1.3.0');
+  assert.deepStrictEqual(bumpVersion(xml, 'major').to, '2.0.0');
+  assert.match(bumpVersion(xml, 'patch').xml, /Version="1.2.4"/);
+  assert.throws(() => bumpVersion(xml, 'huge'), /major, minor or patch/);
+  assert.throws(() => bumpVersion('<GMA3><Plugin Name="X"></Plugin></GMA3>', 'patch'), /No <Plugin/);
+});
+
+test('release: zip entries read back with the right names, bytes and crc', () => {
+  const zlib = require('zlib');
+  const { zip, crc32 } = require('../lib/release');
+  assert.strictEqual(crc32(Buffer.from('123456789')), 0xcbf43926);
+  const files = [{ name: 'a.lua', data: Buffer.from('return 1;'.repeat(50)) }, { name: 'b.xml', data: Buffer.from('<GMA3/>') }];
+  const buf = zip(files);
+  const eocd = buf.length - 22;
+  assert.strictEqual(buf.readUInt32LE(eocd), 0x06054b50);
+  assert.strictEqual(buf.readUInt16LE(eocd + 10), 2);
+  let p = buf.readUInt32LE(eocd + 16);
+  files.forEach((f) => {
+    assert.strictEqual(buf.readUInt32LE(p), 0x02014b50);
+    const csize = buf.readUInt32LE(p + 20);
+    const nameLen = buf.readUInt16LE(p + 28);
+    const local = buf.readUInt32LE(p + 42);
+    assert.strictEqual(buf.toString('utf8', p + 46, p + 46 + nameLen), f.name);
+    const dataStart = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    const raw = zlib.inflateRawSync(buf.subarray(dataStart, dataStart + csize));
+    assert.deepStrictEqual(raw, f.data);
+    assert.strictEqual(buf.readUInt32LE(p + 16), crc32(f.data));
+    p += 46 + nameLen;
+  });
+});
