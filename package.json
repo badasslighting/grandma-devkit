@@ -1,8 +1,8 @@
 {
-  "name": "ma3dev",
-  "displayName": "MA3dev for VScode",
-  "description": "Write grandMA3 Lua plugins: API completion, hover and signature help, plugin scaffolding, one-command deploy, manifest and blocking-loop checks.",
-  "version": "0.3.1",
+  "name": "grandma-devkit",
+  "displayName": "Devkit for Grand MA2+MA3",
+  "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
+  "version": "0.4.0",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -11,7 +11,7 @@
   "homepage": "https://github.com/badasslighting/ma3dev-for-vscode#readme",
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Programming Languages", "Snippets", "Linters"],
-  "keywords": ["grandMA3", "MA3", "lua", "lighting", "plugin"],
+  "keywords": ["grandMA3", "grandMA2", "MA3", "MA2", "gma", "lua", "lighting", "plugin"],
   "main": "./extension.js",
   "activationEvents": ["onLanguage:lua", "workspaceContains:**/*.lua"],
   "extensionPack": ["sumneko.lua"],
@@ -28,26 +28,46 @@
       "[lua]": { "editor.quickSuggestions": { "other": true, "comments": false, "strings": true } }
     },
     "commands": [
-      { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA3" },
-      { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA3" },
-      { "command": "ma3.packagePlugin", "title": "Bump Version and Package Plugin (zip)", "category": "grandMA3" },
-      { "command": "ma3.deployAndRun", "title": "Deploy and Reload on Console", "category": "grandMA3" },
-      { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA3" },
-      { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA3" },
-      { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA3" },
-      { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA3", "icon": "$(refresh)" },
-      { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA3" },
-      { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA3" },
-      { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA3" },
-      { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA3" },
-      { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA3" },
-      { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA3" }
+      { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA" },
+      { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA" },
+      { "command": "ma3.newPluginMa2", "title": "New grandMA2 Plugin", "category": "grandMA" },
+      { "command": "ma3.exportToUsb", "title": "Export Plugin to USB Stick", "category": "grandMA" },
+      { "command": "ma3.packagePlugin", "title": "Bump Version and Package Plugin (zip)", "category": "grandMA" },
+      { "command": "ma3.deployAndRun", "title": "Deploy and Reload on Console", "category": "grandMA" },
+      { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA" },
+      { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA" },
+      { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA" },
+      { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA", "icon": "$(refresh)" },
+      { "command": "ma3.objects.switch", "title": "Switch Object Browser Between grandMA3 and grandMA2", "category": "grandMA", "icon": "$(arrow-swap)" },
+      { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA" },
+      { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA" },
+      { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
+      { "command": "ma3.telnet.send", "title": "Send Command to Console (Telnet)", "category": "grandMA" },
+      { "command": "ma3.telnet.sendSelection", "title": "Send Selected Lines to Console as Commands (Telnet)", "category": "grandMA" },
+      { "command": "ma3.runLuaTests", "title": "Run Lua Tests in This File on Console", "category": "grandMA" },
+      { "command": "ma3.updateApiFromConsole", "title": "Update API from Console (grandMA3)", "category": "grandMA" },
+      { "command": "ma3.checkMa2Api", "title": "Check grandMA2 API List Against Console", "category": "grandMA" },
+      { "command": "ma3.setupLanguageServer", "title": "Set Up Lua Language Server Definitions", "category": "grandMA" },
+      { "command": "ma3.osc.send", "title": "Send Command to Console (OSC)", "category": "grandMA" },
+      { "command": "ma3.osc.sendSelection", "title": "Send Selected Lines to Console as Commands (OSC)", "category": "grandMA" },
+      { "command": "ma3.osc.setup", "title": "Enable OSC Command Input on Console", "category": "grandMA" },
+      { "command": "ma3.osc.disable", "title": "Disable OSC Command Input on Console", "category": "grandMA" },
+      { "command": "ma3.telnet.setPassword", "title": "Set Telnet Password", "category": "grandMA" },
+      { "command": "ma3.telnet.monitor", "title": "Start Console Monitor (Telnet)", "category": "grandMA" },
+      { "command": "ma3.telnet.stopMonitor", "title": "Stop Console Monitor", "category": "grandMA" },
+      { "command": "ma3.installBridge", "title": "Install LuaBridge on Console", "category": "grandMA" },
+      { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA" },
+      { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA" },
+      { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA" }
     ],
     "views": {
       "explorer": [{ "id": "ma3.objects", "name": "grandMA3 Objects" }]
     },
     "menus": {
-      "view/title": [{ "command": "ma3.objects.refresh", "when": "view == ma3.objects", "group": "navigation" }],
+      "view/title": [
+        { "command": "ma3.objects.switch", "when": "view == ma3.objects", "group": "navigation@1" },
+        { "command": "ma3.objects.refresh", "when": "view == ma3.objects", "group": "navigation@2" }
+      ],
       "view/item/context": [
         { "command": "ma3.objects.copyPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@1" },
         { "command": "ma3.objects.copyAddress", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@2" },
@@ -59,8 +79,99 @@
       ]
     },
     "configuration": {
-      "title": "MA3dev for VScode",
+      "title": "Devkit for Grand MA2+MA3",
       "properties": {
+        "ma3.target": {
+          "type": "string",
+          "enum": ["auto", "ma3", "ma2"],
+          "default": "auto",
+          "markdownDescription": "Which console a Lua file is written for. `auto` picks grandMA2 when the code calls `gma.*` or the plugin's manifest is a grandMA2 one (`<MA ...>`), and grandMA3 otherwise."
+        },
+        "ma3.telnet.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host of the console's Telnet command line (grandMA2). Telnet (the remote command line) must be enabled on the console."
+        },
+        "ma3.telnet.port": {
+          "type": "number",
+          "default": 30000,
+          "description": "Telnet command-line port."
+        },
+        "ma3.telnet.monitorPort": {
+          "type": "number",
+          "default": 30001,
+          "description": "Telnet System Monitor port (Lua runtime errors and console messages)."
+        },
+        "ma3.telnet.user": {
+          "type": "string",
+          "default": "administrator",
+          "description": "User profile to log in as over Telnet, for example a dedicated testing user. Many profiles have no password; if yours does, use Set Telnet Password (kept in VS Code's secret storage, never in settings)."
+        },
+        "ma3.telnet.gapMs": {
+          "type": "number",
+          "default": 400,
+          "minimum": 100,
+          "description": "Pause between Telnet commands in milliseconds; the console drops lines when they arrive faster."
+        },
+        "ma3.deployAndRun.via": {
+          "type": "string",
+          "enum": ["auto", "bridge", "telnet", "osc"],
+          "default": "auto",
+          "markdownDescription": "How **Deploy and Reload on Console** reaches the console: `auto` uses the LuaBridge when it is running, and otherwise Telnet (grandMA2) or OSC (grandMA3). OSC gives no confirmation."
+        },
+        "ma3.osc.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host of the grandMA3 console's OSC input."
+        },
+        "ma3.osc.port": {
+          "type": "number",
+          "default": 8000,
+          "description": "UDP port of OSC line 1 on the console."
+        },
+        "ma3.osc.prefix": {
+          "type": "string",
+          "default": "",
+          "description": "Prefix of OSC line 1 on the console; commands go to /<prefix>/cmd, or /cmd when empty."
+        },
+        "ma3.osc.gapMs": {
+          "type": "number",
+          "default": 250,
+          "minimum": 50,
+          "description": "Pause between OSC commands in milliseconds."
+        },
+        "ma3.bridge.slot": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Plugin pool slot **Install LuaBridge on Console** suggests for LuaBridge_MA2 (0 means 99)."
+        },
+        "ma3.test.timeout": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "markdownDescription": "CPU seconds a `*.test.lua` run may use on the console before the bridge stops it. The console UI is frozen that long."
+        },
+        "ma3.usb.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Stick (or folder) **Export Plugin to USB Stick** copies to, without asking. Empty lists the removable drives."
+        },
+        "ma3.ma2.pluginsPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Folder grandMA2 loads plugin files from. Empty uses the newest `%ProgramData%/MA Lighting Technologies/grandma/gma2_V_<version>/plugins` on Windows."
+        },
+        "ma3.ma2.bridgeDir": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Folder the grandMA2 LuaBridge_MA2 plugin polls. Empty uses `%ProgramData%/MA2/luabridge` (or the `MA2_LUABRIDGE_DIR` environment variable). Use onPC with a throwaway show."
+        },
+        "ma3.ma2.version": {
+          "type": "string",
+          "default": "3.9.61",
+          "description": "grandMA2 software version written into new grandMA2 plugin manifests (major.minor.stream)."
+        },
         "ma3.pluginsPath": {
           "type": "string",
           "default": "",

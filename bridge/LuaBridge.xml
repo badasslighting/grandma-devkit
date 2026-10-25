@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GMA3 DataVersion="2.0.0.0">
+	<Plugin Name="LuaBridge" Version="0.1.0">
+		<ComponentLua Name="LuaBridge" FileName="LuaBridge.lua" />
+	</Plugin>
+</GMA3>
