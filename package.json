@@ -40,6 +40,7 @@
       { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA", "icon": "$(refresh)" },
       { "command": "ma3.objects.switch", "title": "Switch Object Browser Between grandMA3 and grandMA2", "category": "grandMA", "icon": "$(arrow-swap)" },
       { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA" },
+      { "command": "ma3.objects.showProperties", "title": "Show Properties", "category": "grandMA" },
       { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA" },
       { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
       { "command": "ma3.telnet.send", "title": "Send Command to Console (Telnet)", "category": "grandMA" },
@@ -69,6 +70,7 @@
         { "command": "ma3.objects.refresh", "when": "view == ma3.objects", "group": "navigation@2" }
       ],
       "view/item/context": [
+        { "command": "ma3.objects.showProperties", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@0" },
         { "command": "ma3.objects.copyPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@1" },
         { "command": "ma3.objects.copyAddress", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@2" },
         { "command": "ma3.objects.insertPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@3" }
