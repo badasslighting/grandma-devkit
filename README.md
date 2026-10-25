@@ -1,4 +1,6 @@
-# MA3dev for VScode
+# MA3dev for VScode (deprecated)
+
+> **This extension has been replaced by [Devkit for Grand MA2+MA3](https://open-vsx.org/extension/badasslighting/grandma-devkit)** (`badasslighting.grandma-devkit`), which covers grandMA3 and grandMA2 and adds live completion, a Lua test runner, Telnet and OSC control, USB export and more. Please uninstall this extension and install the new one; running both registers duplicate completion and commands. Version 0.3.2 is this extension unchanged apart from this notice. It will not be developed further.
 
 VS Code support for writing grandMA3 Lua plugins.
 

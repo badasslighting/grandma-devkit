@@ -1,8 +1,8 @@
 {
   "name": "ma3dev",
-  "displayName": "MA3dev for VScode",
-  "description": "Write grandMA3 Lua plugins: API completion, hover and signature help, plugin scaffolding, one-command deploy, manifest and blocking-loop checks.",
-  "version": "0.3.1",
+  "displayName": "MA3dev for VScode (deprecated, use Devkit for Grand MA2+MA3)",
+  "description": "DEPRECATED: replaced by Devkit for Grand MA2+MA3 (badasslighting.grandma-devkit), which covers grandMA3 and grandMA2. Uninstall this one and install the new extension.",
+  "version": "0.3.2",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",

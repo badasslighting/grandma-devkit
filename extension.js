@@ -28,6 +28,15 @@ function loadApi(context) {
 }
 
 function activate(context) {
+  // This extension is deprecated: say so once, and point at its replacement.
+  if (!context.globalState.get('deprecationShown')) {
+    context.globalState.update('deprecationShown', true);
+    vscode.window
+      .showWarningMessage('MA3dev for VScode is deprecated and replaced by "Devkit for Grand MA2+MA3". Uninstall this one and install the new extension.', 'Open the new extension', 'Dismiss')
+      .then((pick) => {
+        if (pick === 'Open the new extension') vscode.env.openExternal(vscode.Uri.parse('https://open-vsx.org/extension/badasslighting/grandma-devkit'));
+      });
+  }
   let index = loadApi(context);
   const diagnostics = vscode.languages.createDiagnosticCollection('ma3');
   context.subscriptions.push(diagnostics);
