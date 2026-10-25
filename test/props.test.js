@@ -45,6 +45,8 @@ test('nameCandidates narrows to a class and falls back to every name', () => {
 test('ma2Props lists the property names of a grandMA2 class', () => {
   assert.ok(p.ma2Props('MidiConfig').some((x) => x.name === 'SendTimecode'));
   assert.deepStrictEqual(p.ma2Props('NoSuchClass'), []);
+  assert.deepStrictEqual(p.ma2Props('KinetData').map((x) => x.name), ['Valid', 'LocalStart', 'Amount', 'ExternStart', 'IPAddress', 'Info'], 'table-style rows get their names from the list header');
+  assert.ok(p.ma2Props('Surface').length > 20);
 });
 
 test('propValuesLua and parsePropValues round trip the console reply', () => {
