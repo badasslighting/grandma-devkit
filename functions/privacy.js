@@ -15,7 +15,7 @@ main{max-width:640px;margin:0 auto;padding:32px 16px}a{color:var(--acc)}h1{font-
 <h1>Privacy</h1>
 <p>grandMA Object Trees is run by Badass Lighting Tools (BLT).</p>
 <p><b>What we keep.</b> When you sign in with Google we keep your email address and name, when you first and last signed in, and how many times you have. Your Google password is never shared with us.</p>
-<p><b>Why.</b> To let you in and to see how many people use the page.</p>
+<p><b>Why.</b> To let you in, to keep crawlers and bots from using up bandwidth, and to see how many people use the page.</p>
 <p><b>Mailing list.</b> If you tick the box on the sign-in page we also record that you agreed, and the date, so we can send you BLT news. You can unsubscribe at any time. If you leave it unticked we won't email you.</p>
 <p><b>Who sees it.</b> Only BLT. We don't sell or share it. The page runs on Cloudflare and sign-in uses Google, which handle your data as our service providers.</p>
 <p><b>How long.</b> Sign-in sessions last 7 days. Your record stays until you ask us to delete it.</p>
