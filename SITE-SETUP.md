@@ -18,6 +18,6 @@ Sign-in with Google, a D1 user table, a Turnstile bot check, and everything (inc
 
 ## Using it
 
-- User list: sign in as an address in `ADMIN_EMAILS`, open `/admin/users.csv`.
+- User list (no web endpoint, by design): `npx wrangler d1 execute grandma-devkit-users --remote --command "SELECT * FROM users ORDER BY last_seen DESC"`, or use the D1 console in the dashboard. Add `--json` to export.
 - Block someone: D1 Console, `UPDATE users SET blocked = 1 WHERE email = '...';`
 - Sessions last 7 days; `/logout` ends one.
