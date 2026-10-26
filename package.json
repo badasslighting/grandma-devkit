@@ -2,7 +2,7 @@
   "name": "grandma-devkit",
   "displayName": "Devkit for Grand MA2+MA3",
   "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -13,7 +13,7 @@
   "categories": ["Programming Languages", "Snippets", "Linters"],
   "keywords": ["grandMA3", "grandMA2", "MA3", "MA2", "gma", "lua", "lighting", "plugin"],
   "main": "./extension.js",
-  "activationEvents": ["onLanguage:lua", "workspaceContains:**/*.lua"],
+  "activationEvents": ["onLanguage:lua", "onLanguage:gma2macro", "onLanguage:gma3macro", "onLanguage:xml", "workspaceContains:**/*.lua", "workspaceContains:**/*.gma2macro", "workspaceContains:**/*.gma3macro"],
   "extensionPack": ["sumneko.lua"],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
@@ -22,7 +22,11 @@
     "package": "npx @vscode/vsce package"
   },
   "contributes": {
-    "languages": [{ "id": "lua", "extensions": [".lua"], "aliases": ["Lua"] }],
+    "languages": [
+      { "id": "lua", "extensions": [".lua"], "aliases": ["Lua"] },
+      { "id": "gma2macro", "extensions": [".gma2macro"], "aliases": ["grandMA2 Macro"], "configuration": "./language-configuration-macro.json" },
+      { "id": "gma3macro", "extensions": [".gma3macro"], "aliases": ["grandMA3 Macro"], "configuration": "./language-configuration-macro.json" }
+    ],
     "snippets": [{ "language": "lua", "path": "./snippets/lua.json" }],
     "configurationDefaults": {
       "[lua]": { "editor.quickSuggestions": { "other": true, "comments": false, "strings": true } }
@@ -59,25 +63,78 @@
       { "command": "ma3.installBridge", "title": "Install LuaBridge on Console", "category": "grandMA" },
       { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA" },
       { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA" },
-      { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA" }
+      { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA" },
+      { "command": "ma3.vars.replaceRange", "title": "Replace Variables Across a Range ($color1 thru $color5)", "category": "grandMA" },
+      { "command": "ma3.vars.preview", "title": "Preview What This Command Line Runs (Variables Expanded)", "category": "grandMA" },
+      { "command": "ma3.vars.inline", "title": "Replace Variable With Its Value", "category": "grandMA" },
+      { "command": "ma3.vars.extract", "title": "Extract Selection to a Variable", "category": "grandMA" },
+      { "command": "ma3.vars.convert", "title": "Convert Variables and Conditions to the Other Console", "category": "grandMA" },
+      { "command": "ma3.vars.refresh", "title": "Refresh Console Variables", "category": "grandMA", "icon": "$(refresh)" },
+      { "command": "ma3.vars.set", "title": "Set Console Variable", "category": "grandMA" },
+      { "command": "ma3.vars.add", "title": "Add Console Variable", "category": "grandMA", "icon": "$(add)" },
+      { "command": "ma3.vars.delete", "title": "Delete Console Variable", "category": "grandMA" },
+      { "command": "ma3.vars.copyName", "title": "Copy Variable Name", "category": "grandMA" },
+      { "command": "ma3.vars.watch", "title": "Watch Console Variables", "category": "grandMA" },
+      { "command": "ma3.vars.stopWatch", "title": "Stop Watching Variables", "category": "grandMA" },
+      { "command": "ma3.vars.snapshot", "title": "Snapshot Console Variables", "category": "grandMA" },
+      { "command": "ma3.vars.diff", "title": "Compare Console Variables With Snapshot", "category": "grandMA" },
+      { "command": "ma3.vars.restore", "title": "Restore Console Variables From Snapshot", "category": "grandMA" },
+      { "command": "ma3.bank.refresh", "title": "Refresh Variable Bank", "category": "grandMA", "icon": "$(refresh)" },
+      { "command": "ma3.bank.favorite", "title": "Add Variable to Favorites", "category": "grandMA" },
+      { "command": "ma3.bank.unfavorite", "title": "Remove Variable From Favorites", "category": "grandMA" },
+      { "command": "ma3.bank.editFavorite", "title": "Edit Favorite Variable (Value and Note)", "category": "grandMA" },
+      { "command": "ma3.bank.reveal", "title": "Show Where a Variable Is Used", "category": "grandMA" },
+      { "command": "ma3.bank.insert", "title": "Insert Variable (Favorites and Most Used First)", "category": "grandMA" },
+      { "command": "ma3.bank.export", "title": "Export Favorite Variables to a File", "category": "grandMA" },
+      { "command": "ma3.bank.import", "title": "Import Favorite Variables From a File", "category": "grandMA" },
+      { "command": "ma3.bank.applyFavorites", "title": "Set Favorite Variables on the Console", "category": "grandMA" }
     ],
     "views": {
-      "explorer": [{ "id": "ma3.objects", "name": "grandMA3 Objects" }]
+      "explorer": [
+        { "id": "ma3.objects", "name": "grandMA3 Objects" },
+        { "id": "ma3.vars", "name": "Console Variables" },
+        { "id": "ma3.varbank", "name": "Variable Bank" }
+      ]
     },
     "menus": {
       "view/title": [
         { "command": "ma3.objects.switch", "when": "view == ma3.objects", "group": "navigation@1" },
-        { "command": "ma3.objects.refresh", "when": "view == ma3.objects", "group": "navigation@2" }
+        { "command": "ma3.objects.refresh", "when": "view == ma3.objects", "group": "navigation@2" },
+        { "command": "ma3.vars.refresh", "when": "view == ma3.vars", "group": "navigation@1" },
+        { "command": "ma3.vars.add", "when": "view == ma3.vars", "group": "navigation@2" },
+        { "command": "ma3.bank.refresh", "when": "view == ma3.varbank", "group": "navigation@1" },
+        { "command": "ma3.bank.favorite", "when": "view == ma3.varbank", "group": "navigation@2" },
+        { "command": "ma3.bank.insert", "when": "view == ma3.varbank", "group": "navigation@3" },
+        { "command": "ma3.bank.import", "when": "view == ma3.varbank", "group": "1_file@1" },
+        { "command": "ma3.bank.export", "when": "view == ma3.varbank", "group": "1_file@2" },
+        { "command": "ma3.bank.applyFavorites", "when": "view == ma3.varbank", "group": "2_console@1" }
       ],
       "view/item/context": [
         { "command": "ma3.objects.showProperties", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@0" },
         { "command": "ma3.objects.copyPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@1" },
         { "command": "ma3.objects.copyAddress", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@2" },
-        { "command": "ma3.objects.insertPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@3" }
+        { "command": "ma3.objects.insertPath", "when": "view == ma3.objects && viewItem == ma3object", "group": "ma3@3" },
+        { "command": "ma3.vars.set", "when": "view == ma3.vars && viewItem == ma3var", "group": "ma3@0" },
+        { "command": "ma3.vars.delete", "when": "view == ma3.vars && viewItem == ma3var", "group": "ma3@1" },
+        { "command": "ma3.vars.copyName", "when": "view == ma3.vars && (viewItem == ma3var || viewItem == ma3varsystem)", "group": "ma3@2" },
+        { "command": "ma3.vars.watch", "when": "view == ma3.vars && viewItem == ma3varconsole", "group": "ma3@3" },
+        { "command": "ma3.vars.snapshot", "when": "view == ma3.vars && viewItem == ma3varconsole", "group": "ma3@4" },
+        { "command": "ma3.vars.diff", "when": "view == ma3.vars && viewItem == ma3varconsole", "group": "ma3@5" },
+        { "command": "ma3.vars.restore", "when": "view == ma3.vars && viewItem == ma3varconsole", "group": "ma3@6" },
+        { "command": "ma3.bank.favorite", "when": "view == ma3.varbank && (viewItem == ma3bankvar || viewItem == ma3bankstock)", "group": "ma3@0" },
+        { "command": "ma3.bank.unfavorite", "when": "view == ma3.varbank && viewItem == ma3bankfav", "group": "ma3@0" },
+        { "command": "ma3.bank.editFavorite", "when": "view == ma3.varbank && viewItem == ma3bankfav", "group": "ma3@1" },
+        { "command": "ma3.bank.reveal", "when": "view == ma3.varbank && viewItem == ma3bankvar", "group": "ma3@2" }
       ],
       "editor/context": [
         { "command": "ma3.runOnConsole", "when": "editorLangId == lua", "group": "ma3" },
-        { "command": "ma3.deploy", "when": "resourceExtname == .lua || resourceExtname == .xml", "group": "ma3" }
+        { "command": "ma3.deploy", "when": "resourceExtname == .lua || resourceExtname == .xml", "group": "ma3" },
+        { "command": "ma3.vars.replaceRange", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@1" },
+        { "command": "ma3.vars.preview", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@2" },
+        { "command": "ma3.vars.extract", "when": "(editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro) && editorHasSelection", "group": "ma3vars@3" },
+        { "command": "ma3.vars.convert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@4" },
+        { "command": "ma3.bank.insert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@5" },
+        { "command": "ma3.bank.favorite", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@6" }
       ]
     },
     "configuration": {
@@ -215,6 +272,12 @@
           "type": "boolean",
           "default": false,
           "description": "Hint when a variable is assigned without \"local\" and so becomes a global shared with every plugin."
+        },
+        "ma3.vars.watchIntervalMs": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 500,
+          "description": "How often Watch Console Variables reads the console, in milliseconds."
         },
         "ma3.diagnostics": {
           "type": "boolean",
