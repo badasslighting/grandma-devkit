@@ -1,6 +1,6 @@
 # grandMA object trees
 
-Object trees of grandMA2 onPC 3.9.x and grandMA3 onPC 2.5.x with per-class properties.
+Object trees of grandMA2 onPC 3.9.61.1 and grandMA3 onPC 2.5.1.0 with per-class properties.
 
 - `index.html`: standalone interactive tree (search, addresses, properties panel). Open it locally in a browser.
 - `ma2_tree.json`, `ma3_tree.json`: tree structure. Node keys: `i` index, `c` class (MA2: name), `n` name, `k` children, `r`/`m` run of identical items, `s` pool slot capacity, `o`/`x` items or instances omitted.
