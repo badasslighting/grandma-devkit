@@ -43,6 +43,21 @@
     ],
     "description": "Run code without letting an error abort the plugin"
   },
+  "grandMA3 conditional command": {
+    "prefix": "ma3if",
+    "body": ["if GetVar(UserVars(), \"${1:name}\") == ${2:1} then", "\tCmd(\"${3:Go+ Sequence 1}\")", "end"],
+    "description": "Run a command only if a user variable matches (grandMA3 has no [condition] syntax; GetVar returns a number or a string, as it was stored)"
+  },
+  "grandMA2 conditional command": {
+    "prefix": "ma2if",
+    "body": ["if gma.show.getvar('${1:name}') == '${2:1}' then", "\tgma.cmd('${3:Go+ Sequence 1}')", "end"],
+    "description": "Run a command only if a variable matches (gma.show.getvar returns text, so compare with a string or use tonumber)"
+  },
+  "grandMA2 [condition] command": {
+    "prefix": "ma2cond",
+    "body": "gma.cmd('[\\$${1:var}==${2:value}] ${3:Go+ Sequence 1}')",
+    "description": "A grandMA2 command line that runs only if the condition is true (== > < <= >=, compared as text)"
+  },
   "Yield to the console": {
     "prefix": "yield",
     "body": "coroutine.yield(${1:0.1})",
