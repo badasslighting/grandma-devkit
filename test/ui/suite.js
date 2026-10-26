@@ -66,16 +66,37 @@ test('0.3 commands are registered', async () => {
   for (const c of ['ma3.deployAndRun', 'ma3.packagePlugin', 'ma3.refreshShow', 'ma3.objects.refresh', 'ma3.objects.copyPath']) assert.ok(cmds.includes(c), `${c} registered`);
 });
 
+// The test makes its own group, so it does not depend on what the running show holds: slot 999 must be free,
+// the group is deleted in a finally, and the slot is checked empty again afterwards.
+const TEMP_GROUP = 999;
+const groupSlotLua = (action) =>
+  [
+    'local g = Root().ShowData.DataPools[1].Groups',
+    action,
+    `return tostring(g[${TEMP_GROUP}] ~= nil)`,
+  ].join('\n');
+const runBridge = (lua) => bridgeLib.run(bridgeLib.defaultBridgeDir(), lua, 5);
+
 testMa3('Cmd strings complete console keywords and live show groups', async () => {
-  const { doc } = await openLua('cmd.lua', 'Cmd("Store Group ")\n');
-  await vscode.commands.executeCommand('ma3.refreshShow');
-  const pos = new vscode.Position(0, 17);
-  const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, pos);
-  const labels = list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
-  assert.ok(labels.includes('Fixture'), 'object keywords offered after Store Group? (keyword list present)');
-  assert.ok(list.items.some((i) => /^Group: /.test(i.detail || '')), 'group numbers from the running show offered');
-  const outside = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 3));
-  assert.ok(!outside.items.some((i) => i.label === 'Fixture'), 'no command keywords outside the string');
+  const unq = (r) => String((r.returns && r.returns[0]) || '').replace(/"/g, '');
+  assert.strictEqual(unq(await runBridge(groupSlotLua(''))), 'false', `group slot ${TEMP_GROUP} must be free for this test`);
+  try {
+    const made = await runBridge(groupSlotLua(`Cmd('ClearAll')\nCmd('Store Group ${TEMP_GROUP} "UiDevkitTempGroup" /NC')`));
+    assert.strictEqual(unq(made), 'true', 'the temporary group was stored');
+    const { doc } = await openLua('cmd.lua', 'Cmd("Store Group ")\n');
+    await vscode.commands.executeCommand('ma3.refreshShow');
+    const pos = new vscode.Position(0, 17);
+    const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, pos);
+    const labels = list.items.map(labelOf);
+    assert.ok(labels.includes('Fixture'), 'object keywords offered after Store Group? (keyword list present)');
+    assert.ok(list.items.some((i) => /^Group: /.test(i.detail || '') && /UiDevkitTempGroup/.test(i.detail || '')), `the temporary group is offered with its label: ${list.items.filter((i) => /^Group: /.test(i.detail || '')).map((i) => i.detail)}`);
+    const outside = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 3));
+    assert.ok(!outside.items.some((i) => i.label === 'Fixture'), 'no command keywords outside the string');
+  } finally {
+    const gone = await runBridge(groupSlotLua(`Cmd('Delete Group ${TEMP_GROUP} /NC')`));
+    await vscode.commands.executeCommand('ma3.refreshShow');
+    assert.strictEqual(unq(gone), 'false', `group slot ${TEMP_GROUP} cleaned up`);
+  }
 });
 
 test('lint flags a typo, Cmd in a loop and heavy work in a Timer callback', async () => {
@@ -115,6 +136,49 @@ testMa3('object browser lists Root children through the bridge', async () => {
   const r = await bridge.run(bridge.defaultBridgeDir(), listLua([]), 2);
   const { total, items } = parseList(r.returns);
   assert.ok(total > 5 && items.some((i) => i.name === 'ShowData'), 'Root has ShowData');
+});
+
+const labelOf = (i) => (typeof i.label === 'string' ? i.label : i.label.label);
+
+test('property names and enum values complete inside Get/Set, and hover names the property', async () => {
+  const { doc } = await openLua('props.lua', 'local v = obj:Get("Na\nobj:Set("LOCK", "Y\nlocal n = obj:Get("NAME")\nlocal x = other("Na\n');
+  const names = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 21));
+  const nl = names.items.map(labelOf);
+  assert.ok(['NAME', 'NOTE', 'LOCK', 'INDEX'].every((n) => nl.includes(n)), `property names offered: ${nl.slice(0, 6)}`);
+  const name = names.items.find((i) => labelOf(i) === 'NAME');
+  assert.ok(/String/.test(name.detail), `type shown: ${name.detail}`);
+  const vals = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(1, 20));
+  const vl = vals.items.map(labelOf);
+  assert.ok(vl.includes('Yes') && vl.includes('No'), `enum values for LOCK: ${vl}`);
+  const other = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(3, 20));
+  assert.ok(!other.items.some((i) => labelOf(i) === 'NOTE'), 'no property names outside Get/Set');
+  const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', doc.uri, new vscode.Position(2, 20));
+  assert.ok(hovers.some((h) => h.contents.some((c) => /\*\*NAME\*\*/.test(c.value) && /String/.test(c.value))), 'hover shows the property');
+});
+
+const propsOutput = () =>
+  vscode.workspace.textDocuments
+    .filter((d) => d.uri.scheme === 'output' && /grandMA Properties/i.test(d.uri.path + d.uri.authority + d.uri.query))
+    .map((d) => d.getText())
+    .join('\n');
+
+test('Show Properties lists a grandMA2 class from the bundled schema', async () => {
+  await vscode.commands.executeCommand('ma3.objects.showProperties', { path: [1], target: 'ma2', addr: 'Root 2', cls: 'TIMECONFIG' });
+  const text = await until(() => (/Regard Daylight Saving/.test(propsOutput()) ? propsOutput() : ''), 'ma2 properties in the output channel');
+  assert.ok(/Hour/.test(text) && /On\/Off/.test(text), 'names and shapes listed');
+});
+
+testMa3('property completion narrows to the class of a Root() path, and Show Properties prints live values', async () => {
+  const { doc } = await openLua('propsLive.lua', 'Root().ShowData.DataPools[1]:Get("\n');
+  const narrowed = await until(async () => {
+    const r = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 37));
+    const l = r.items.map(labelOf);
+    return l.includes('NAME') && l.length < 60 ? l : null;
+  }, 'completion narrowed to the Pool class', 10000);
+  assert.ok(narrowed.includes('PREVIEWCOPY'), `Pool property offered: ${narrowed}`);
+  await vscode.commands.executeCommand('ma3.objects.showProperties', { path: [14, 14, 1], target: 'ma3', cls: 'Pool' });
+  const text = await until(() => (/live values from the console/.test(propsOutput()) && /NAME\s+String/.test(propsOutput()) ? propsOutput() : ''), 'live properties with the NAME row');
+  assert.ok(/NAME\s+String\s+rw/.test(text), 'NAME row with its type');
 });
 
 test('grandMA2: gma.* completes, hovers, shows signatures and lints', async () => {

@@ -23,6 +23,7 @@ const { detectTarget } = require('./lib/target');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
+const props = require('./lib/props');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
 const { enumNamesLua, enumMembersLua, attributeNamesLua, parseNames, parseMembers, enumContext, attributeContext } = require('./lib/liveNames');
 const bridge = require('./lib/bridge');
@@ -134,6 +135,34 @@ function activate(context) {
         async provideCompletionItems(doc, pos) {
           const before = doc.lineAt(pos).text.slice(0, pos.character);
           if (/--/.test(before)) return [];
+          // Property names inside Get()/Set() and the enum values Set() accepts, from the bundled object schema;
+          // a literal Root() receiver is asked for its class so the list shrinks to that object's properties.
+          const pc = props.propContext(before);
+          if (pc && targetOf(doc) === 'ma3') {
+            let cls = '';
+            if (pc.segments) {
+              try {
+                cls = await liveFetch(`class:${JSON.stringify(pc.segments)}`, props.pathClassLua(pc.segments), props.parseClass, 30000);
+              } catch (_) {
+                cls = '';
+              }
+            }
+            if (pc.kind === 'value') {
+              return props.valueCandidates(pc.prop, cls).map((v) => {
+                const item = new vscode.CompletionItem(v.name, vscode.CompletionItemKind.EnumMember);
+                item.detail = `${v.enumName} = ${v.value}`;
+                return item;
+              });
+            }
+            return props.nameCandidates(cls).map((p) => {
+              const item = new vscode.CompletionItem(p.name, vscode.CompletionItemKind.Property);
+              item.detail = `${p.type}${p.readOnly ? ' (read-only)' : ''}`;
+              const vals = p.enumName ? props.enumValues(p.enumName).map((v) => v.name).slice(0, 24) : [];
+              item.documentation = new vscode.MarkdownString([cls ? `Property of ${cls}.` : `Used by ${p.classes} object class${p.classes === 1 ? '' : 'es'}.`, vals.length ? `Values: ${vals.join(', ')}` : ''].filter(Boolean).join('\n\n'));
+              item.sortText = `${p.readOnly ? 1 : 0}${p.name}`;
+              return item;
+            });
+          }
           const str = stringContext(before);
           if (str && attributeContext(str) && targetOf(doc) === 'ma3') {
             const names = (await liveFetch('attributes', attributeNamesLua(), parseNames)).map((n) => {
@@ -315,6 +344,13 @@ function activate(context) {
       provideHover(doc, pos) {
         const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_]\w*/);
         if (!range) return null;
+        const pa = targetOf(doc) === 'ma3' ? props.propAt(doc.lineAt(pos).text, pos.character) : null;
+        const pinfo = pa && props.ma3Union().get(pa.name);
+        if (pinfo) {
+          const vals = pinfo.enumName ? props.enumValues(pinfo.enumName).map((v) => `${v.name} (${v.value})`).slice(0, 24) : [];
+          const md = new vscode.MarkdownString([`**${pinfo.name}** \`${pinfo.type}\`${pinfo.readOnly ? ', read-only' : ''}`, `Used by ${pinfo.classes} object class${pinfo.classes === 1 ? '' : 'es'}.`, vals.length ? `Values: ${vals.join(', ')}` : ''].filter(Boolean).join('\n\n'));
+          return new vscode.Hover(md, new vscode.Range(pos.line, pa.start, pos.line, pa.end));
+        }
         const gmaPath = pathAt(doc.lineAt(pos).text, range.end.character);
         const gmaFn = gmaPath && BY_PATH.get(gmaPath);
         if (gmaFn) {
@@ -702,6 +738,7 @@ function activate(context) {
   const treeChanged = new vscode.EventEmitter();
   const luaPath = (p) => `Root()${p.map((i) => `[${i}]`).join('')}`;
   let treeTarget = 'ma3';
+  let propsOut = null;
   const ma2Lua = (addr) => `gma.show.getobj.handle("${addr}")`;
   const objectTree = {
     onDidChangeTreeData: treeChanged.event,
@@ -719,9 +756,10 @@ function activate(context) {
             const addr = ma2Address(parts);
             const item = new vscode.TreeItem(c.name.trim() || c.cls, c.amount > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
             item.description = c.cls;
-            item.tooltip = `${c.name}\n${addr || '(no address: unnumbered object)'}\n${c.amount} slot${c.amount === 1 ? '' : 's'}`;
+            const p2 = props.ma2Props(c.cls);
+            item.tooltip = new vscode.MarkdownString(`${c.name}\n\n${addr || '(no address: unnumbered object)'}\n\n${c.amount} slot${c.amount === 1 ? '' : 's'}${p2.length ? `\n\n${props.propsMarkdown(c.cls, p2)}` : ''}`);
             item.contextValue = 'ma3object';
-            return { item, path: path.concat(c.index), parts, addr, target: 'ma2' };
+            return { item, path: path.concat(c.index), parts, addr, target: 'ma2', cls: c.cls };
           });
           const last = items.length ? items[items.length - 1].index : -1;
           if (el && last + 1 < total) {
@@ -739,9 +777,10 @@ function activate(context) {
         const nodes = items.map((c) => {
           const item = new vscode.TreeItem(c.name, c.count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
           item.description = c.addr;
-          item.tooltip = `${c.name}\n${luaPath(path.concat(c.index))}\n${c.count} child${c.count === 1 ? '' : 'ren'}`;
+          const p3 = props.ma3Props(c.cls);
+          item.tooltip = new vscode.MarkdownString(`${c.name}\n\n\`${luaPath(path.concat(c.index))}\`\n\n${c.count} child${c.count === 1 ? '' : 'ren'}\n\n${props.propsMarkdown(c.cls, p3, 25)}`);
           item.contextValue = 'ma3object';
-          return { item, path: path.concat(c.index), addr: c.addr };
+          return { item, path: path.concat(c.index), addr: c.addr, cls: c.cls };
         });
         const last = items.length ? items[items.length - 1].index : 0;
         if (last < total) {
@@ -773,6 +812,32 @@ function activate(context) {
       await vscode.env.clipboard.writeText(text);
       vscode.window.setStatusBarMessage(`Copied ${text}`, 3000);
       return text;
+    }),
+    vscode.commands.registerCommand('ma3.objects.showProperties', async (el) => {
+      if (!el || !el.path) return;
+      if (!propsOut) {
+        propsOut = vscode.window.createOutputChannel('grandMA Properties');
+        context.subscriptions.push(propsOut);
+      }
+      const out = propsOut;
+      out.clear();
+      const row = (p) => `${p.name.padEnd(28)} ${String(p.type).padEnd(16)} ${p.readOnly ? 'ro' : 'rw'}  ${p.value !== undefined ? p.value : ''}${p.enumName ? `  [${p.enumName}]` : ''}`;
+      if (el.target === 'ma2') {
+        out.appendLine(`${el.addr || el.path.join('.')}  (grandMA2, from the bundled schema; no live values)`);
+        props.ma2Props(el.cls || '').forEach((p) => out.appendLine(`${p.name.padEnd(28)} ${p.type}${p.values && p.values.length ? `  [${p.values.join(', ')}]` : ''}`));
+      } else {
+        let live = null;
+        try {
+          const r = await bridge.run(bridgeDir(), props.propValuesLua(el.path), cfg().get('bridge.timeout'));
+          if (r.ok) live = props.parsePropValues(r.returns);
+        } catch (_) {
+          live = null;
+        }
+        const cls = live ? live.cls : el.cls || '';
+        out.appendLine(`${luaPath(el.path)}  ${cls}  (${live ? 'live values from the console' : 'bundled schema; the LuaBridge is not running, so no values'})`);
+        (live ? live.props : props.ma3Props(cls)).forEach((p) => out.appendLine(row(p)));
+      }
+      out.show(true);
     }),
     vscode.commands.registerCommand('ma3.objects.copyAddress', async (el) => {
       if (!el || !el.addr) return;
