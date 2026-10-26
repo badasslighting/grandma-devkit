@@ -5,7 +5,7 @@ export async function onRequestGet({ env }) {
     ? `<p>To see or delete your data, email <a href="mailto:${esc(env.CONTACT_EMAIL)}">${esc(env.CONTACT_EMAIL)}</a>.</p>`
     : '';
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
 :root{--bg:#f6f5f2;--fg:#1c1b19;--acc:#8a6508}
 @media (prefers-color-scheme:dark){:root{--bg:#14161a;--fg:#e8e6e1;--acc:#e0b34a}}

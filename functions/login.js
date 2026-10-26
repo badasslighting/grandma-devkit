@@ -3,7 +3,7 @@ import { esc } from './_lib.js';
 export async function onRequestGet({ env, request }) {
   const err = new URL(request.url).searchParams.get('error');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>grandMA Object Trees</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>grandMA Object Trees</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 :root{--bg:#f6f5f2;--fg:#1c1b19;--card:#fff;--line:#d9d6cf;--acc:#b8860b}
