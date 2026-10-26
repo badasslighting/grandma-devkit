@@ -16,7 +16,7 @@ button{width:100%;padding:12px;border:0;border-radius:8px;background:var(--acc);
 small a{color:var(--acc)}.err{color:#c0392b;margin-top:12px;font-size:.9rem}small{display:block;margin-top:16px;opacity:.65}
 </style></head><body><main>
 <h1>grandMA Object Trees</h1>
-<p>You're signing in to the <b>grandMA Object Trees</b>, a browsable reference of the grandMA2 3.9.x and grandMA3 2.5.x object trees, from Badass Lighting Tools (BLT).</p>
+<p>You're signing in to the <b>grandMA Object Trees</b>, a browsable reference of the grandMA2 3.9.61.1 and grandMA3 2.5.1.0 object trees, from Badass Lighting Tools (BLT).</p>
 <form method="post" action="/auth/start">
 <div class="cf-turnstile" data-sitekey="${esc(env.TURNSTILE_SITEKEY)}"></div>
 <label class="opt"><input type="checkbox" name="newsletter" value="1"> Send me news and updates from Badass Lighting Tools (BLT). You can unsubscribe at any time.</label>
