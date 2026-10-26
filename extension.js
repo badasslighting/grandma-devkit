@@ -20,6 +20,8 @@ const { ma2TreeLua, parseMa2Tree, ma2Address, ma2ShowLua } = require('./lib/ma2O
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget } = require('./lib/target');
+const varFeatures = require('./lib/varFeatures');
+const { macroKind } = require('./lib/macroFiles');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
@@ -58,6 +60,20 @@ function targetOf(doc) {
   }
   return detectTarget(text, setting, hit.xml);
 }
+// The same decision for a file that is not open: the code, then the manifest next to it.
+function targetOfFile(text, fileName) {
+  const setting = cfg().get('target');
+  const quick = detectTarget(text, setting);
+  if (setting !== 'auto' || quick === 'ma2') return quick;
+  let xml = '';
+  try {
+    const m = findManifest(fileName);
+    xml = m ? fs.readFileSync(m, 'utf8') : '';
+  } catch (_) {
+    /* no manifest */
+  }
+  return detectTarget(text, setting, xml);
+}
 const manifestIsMa2 = (manifest) => {
   try {
     return isMa2(fs.readFileSync(manifest, 'utf8'));
@@ -76,6 +92,7 @@ function activate(context) {
   let index = loadApi(context);
   const diagnostics = vscode.languages.createDiagnosticCollection('ma3');
   context.subscriptions.push(diagnostics);
+  let vars = null; // variable features (lib/varFeatures.js), registered once the console helpers below exist
 
   // ---- live show contents (cached; refreshed when stale, never when the bridge is down)
   const showCaches = { ma3: { at: 0, data: null, pending: null }, ma2: { at: 0, data: null, pending: null } };
@@ -454,11 +471,18 @@ function activate(context) {
         d.code = f.rule;
         found.push(d);
       }
-    } else if (doc.fileName.toLowerCase().endsWith('.xml')) {
+    } else if (doc.fileName.toLowerCase().endsWith('.xml') && !macroKind(doc.fileName, doc.getText())) {
       for (const p of checkManifest(doc.getText(), path.dirname(doc.fileName))) {
         found.push(
           new vscode.Diagnostic(lineRange(p.line), p.message, p.severity === 'error' ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning)
         );
+      }
+    }
+    if (vars && (doc.languageId === 'lua' || vars.isMacroDoc(doc))) {
+      for (const f of vars.findings(doc)) {
+        const d = new vscode.Diagnostic(f.range, f.message, f.severity);
+        d.code = f.code;
+        found.push(d);
       }
     }
     diagnostics.set(doc.uri, found);
@@ -1296,6 +1320,21 @@ function activate(context) {
       }
     })
   );
+
+  // ---- variables: workspace index, checks, completion, rename, refactoring, live view (lib/varFeatures.js)
+  vars = varFeatures.register({
+    vscode,
+    context,
+    cfg,
+    targetOf,
+    targetOfFile,
+    bridge,
+    bridgeDirFor,
+    openSession,
+    telnetOptions,
+    onChange: () => vscode.workspace.textDocuments.forEach(refresh),
+  });
+  vscode.workspace.textDocuments.forEach(refresh);
 
   // Replaces the API list (saved so it survives restarts), and re-checks every open file against it.
   function applyApi(api) {

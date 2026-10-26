@@ -616,6 +616,8 @@ test('Run on a non-Lua editor warns instead of running', async () => {
   assert.strictEqual(popups[0][0], 'showWarningMessage');
 });
 
+require('./varsSuite')({ test, testMa2, testMa3, ws, openLua, until, sleep, labelOf, bridgeLib, popups });
+
 // Visual mode: stage a state, ask the launcher (CDP) for a screenshot, wait for it.
 async function visual() {
   const dir = process.env.MA3DEV_UI_SHOTS;
@@ -647,7 +649,9 @@ async function run() {
     return;
   }
   const results = [];
+  const only = process.env.MA3DEV_UI_ONLY ? new RegExp(process.env.MA3DEV_UI_ONLY, 'i') : null;
   for (const t of tests) {
+    if (only && !only.test(t.name)) continue;
     if (t.needs && !(await t.needs())) {
       results.push({ name: t.name, ok: true, skipped: t.why });
       continue;
