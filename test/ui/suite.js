@@ -66,16 +66,37 @@ test('0.3 commands are registered', async () => {
   for (const c of ['ma3.deployAndRun', 'ma3.packagePlugin', 'ma3.refreshShow', 'ma3.objects.refresh', 'ma3.objects.copyPath']) assert.ok(cmds.includes(c), `${c} registered`);
 });
 
+// The test makes its own group, so it does not depend on what the running show holds: slot 999 must be free,
+// the group is deleted in a finally, and the slot is checked empty again afterwards.
+const TEMP_GROUP = 999;
+const groupSlotLua = (action) =>
+  [
+    'local g = Root().ShowData.DataPools[1].Groups',
+    action,
+    `return tostring(g[${TEMP_GROUP}] ~= nil)`,
+  ].join('\n');
+const runBridge = (lua) => bridgeLib.run(bridgeLib.defaultBridgeDir(), lua, 5);
+
 testMa3('Cmd strings complete console keywords and live show groups', async () => {
-  const { doc } = await openLua('cmd.lua', 'Cmd("Store Group ")\n');
-  await vscode.commands.executeCommand('ma3.refreshShow');
-  const pos = new vscode.Position(0, 17);
-  const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, pos);
-  const labels = list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
-  assert.ok(labels.includes('Fixture'), 'object keywords offered after Store Group? (keyword list present)');
-  assert.ok(list.items.some((i) => /^Group: /.test(i.detail || '')), 'group numbers from the running show offered');
-  const outside = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 3));
-  assert.ok(!outside.items.some((i) => i.label === 'Fixture'), 'no command keywords outside the string');
+  const unq = (r) => String((r.returns && r.returns[0]) || '').replace(/"/g, '');
+  assert.strictEqual(unq(await runBridge(groupSlotLua(''))), 'false', `group slot ${TEMP_GROUP} must be free for this test`);
+  try {
+    const made = await runBridge(groupSlotLua(`Cmd('ClearAll')\nCmd('Store Group ${TEMP_GROUP} "UiDevkitTempGroup" /NC')`));
+    assert.strictEqual(unq(made), 'true', 'the temporary group was stored');
+    const { doc } = await openLua('cmd.lua', 'Cmd("Store Group ")\n');
+    await vscode.commands.executeCommand('ma3.refreshShow');
+    const pos = new vscode.Position(0, 17);
+    const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, pos);
+    const labels = list.items.map(labelOf);
+    assert.ok(labels.includes('Fixture'), 'object keywords offered after Store Group? (keyword list present)');
+    assert.ok(list.items.some((i) => /^Group: /.test(i.detail || '') && /UiDevkitTempGroup/.test(i.detail || '')), `the temporary group is offered with its label: ${list.items.filter((i) => /^Group: /.test(i.detail || '')).map((i) => i.detail)}`);
+    const outside = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 3));
+    assert.ok(!outside.items.some((i) => i.label === 'Fixture'), 'no command keywords outside the string');
+  } finally {
+    const gone = await runBridge(groupSlotLua(`Cmd('Delete Group ${TEMP_GROUP} /NC')`));
+    await vscode.commands.executeCommand('ma3.refreshShow');
+    assert.strictEqual(unq(gone), 'false', `group slot ${TEMP_GROUP} cleaned up`);
+  }
 });
 
 test('lint flags a typo, Cmd in a loop and heavy work in a Timer callback', async () => {
