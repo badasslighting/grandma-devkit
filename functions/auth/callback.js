@@ -32,6 +32,10 @@ export async function onRequestGet({ request, env }) {
     `INSERT INTO users (email, name, first_seen, last_seen, visits) VALUES (?, ?, ?, ?, 1)
      ON CONFLICT(email) DO UPDATE SET name = excluded.name, last_seen = excluded.last_seen, visits = visits + 1`
   ).bind(email, claims.name || '', now, now).run();
+  // The box is unticked by default; only an explicit tick records consent, and a later visit never removes it.
+  if (getCookie(request, 'opt_in') === '1') {
+    await env.DB.prepare('UPDATE users SET mailing_opt_in = 1, mailing_opt_in_at = COALESCE(mailing_opt_in_at, ?) WHERE email = ?').bind(now, email).run();
+  }
   const user = await env.DB.prepare('SELECT blocked FROM users WHERE email = ?').bind(email).first();
   if (user.blocked) return fail(origin, 'This account is blocked');
 
@@ -45,5 +49,6 @@ export async function onRequestGet({ request, env }) {
   const headers = new Headers({ Location: origin + '/' });
   headers.append('Set-Cookie', cookie('sid', sid, SESSION_DAYS * 86400));
   headers.append('Set-Cookie', cookie('oauth_state', '', 0));
+  headers.append('Set-Cookie', cookie('opt_in', '', 0));
   return new Response(null, { status: 302, headers });
 }

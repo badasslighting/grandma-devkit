@@ -23,8 +23,8 @@ export async function onRequestPost({ request, env }) {
     state,
     prompt: 'select_account',
   });
-  return new Response(null, {
-    status: 302,
-    headers: { Location: auth.toString(), 'Set-Cookie': cookie('oauth_state', state, 600) },
-  });
+  const headers = new Headers({ Location: auth.toString() });
+  headers.append('Set-Cookie', cookie('oauth_state', state, 600));
+  headers.append('Set-Cookie', cookie('opt_in', form.get('newsletter') === '1' ? '1' : '0', 600));
+  return new Response(null, { status: 302, headers });
 }
