@@ -47,6 +47,9 @@ test('ma2Props lists the property names of a grandMA2 class', () => {
   assert.deepStrictEqual(p.ma2Props('NoSuchClass'), []);
   assert.deepStrictEqual(p.ma2Props('KinetData').map((x) => x.name), ['Valid', 'LocalStart', 'Amount', 'ExternStart', 'IPAddress', 'Info'], 'table-style rows get their names from the list header');
   assert.ok(p.ma2Props('Surface').length > 20);
+  assert.ok(p.ma2Props('TIMECONFIG').some((x) => x.name === 'Regard Daylight Saving' && x.type === 'On/Off'), 'the console class from the object browser finds the property list');
+  assert.deepStrictEqual(p.ma2Props('CMD_GEL_POOL').map((x) => x.name), ['No.', 'Name']);
+  assert.deepStrictEqual(p.ma2Props('SETTINGS_COLLECT'), [], 'a pure container has no properties');
 });
 
 test('propValuesLua and parsePropValues round trip the console reply', () => {
