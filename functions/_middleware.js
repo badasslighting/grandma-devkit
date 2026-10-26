@@ -1,7 +1,7 @@
 import { currentUser, withHeaders } from './_lib.js';
 
 // Everything except the sign-in routes needs a valid session.
-const OPEN = [/^\/login\/?$/, /^\/auth\//, /^\/logout\/?$/];
+const OPEN = [/^\/login\/?$/, /^\/privacy\/?$/, /^\/auth\//, /^\/logout\/?$/];
 
 export async function onRequest(context) {
   const { request, env, next } = context;
