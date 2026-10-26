@@ -19,7 +19,7 @@ export async function onRequestGet({ request, env }) {
       grant_type: 'authorization_code',
     }),
   }).then(r => r.json()).catch(() => ({}));
-  if (!tok.id_token) return fail(origin, 'Google sign-in failed');
+  if (!tok.id_token) return fail(origin, 'Google sign-in failed' + (tok.error ? ` (${String(tok.error).slice(0, 40)})` : ''));
 
   // The id_token comes straight from Google's token endpoint over TLS, so its claims are trusted.
   const claims = JSON.parse(atob(tok.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
