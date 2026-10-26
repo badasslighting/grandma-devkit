@@ -2,3 +2,7 @@ test/**
 scripts/**
 .vscode/**
 *.vsix
+functions/**
+schema.sql
+wrangler.toml
+SITE-SETUP.md
