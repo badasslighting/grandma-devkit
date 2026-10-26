@@ -28,14 +28,14 @@ test('suggestKeywords orders verbs, objects and modifiers by position', () => {
 test('object tree: listLua builds an index path and parseList decodes the bridge return', () => {
   const { listLua, parseList, unquote } = require('../lib/objectTree');
   assert.match(listLua([14, 14, 'x', -1]), /ipairs\(\{14, 14\}\)/);
-  const q = '"total=2 ;; 1|3|14.1|Show \\"A\\" ;; 2|0|14.2|Plain"';
+  const q = '"total=2 ;; 1|3|14.1|ShowData|Show \\"A\\" ;; 2|0|14.2|Pool|Plain"';
   const bs = String.fromCharCode(92);
   assert.strictEqual(unquote(`"a${bs}${String.fromCharCode(10)}b"`), 'a\nb');
   assert.deepStrictEqual(parseList([q]), {
     total: 2,
     items: [
-      { index: 1, count: 3, addr: '14.1', name: 'Show "A"' },
-      { index: 2, count: 0, addr: '14.2', name: 'Plain' },
+      { index: 1, count: 3, addr: '14.1', cls: 'ShowData', name: 'Show "A"' },
+      { index: 2, count: 0, addr: '14.2', cls: 'Pool', name: 'Plain' },
     ],
   });
   assert.deepStrictEqual(parseList([]), { total: 0, items: [] });
