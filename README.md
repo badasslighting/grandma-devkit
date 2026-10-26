@@ -6,6 +6,10 @@ Unofficial community tool, not affiliated with or endorsed by MA Lighting. grand
 
 **Upgrading from "MA3dev for VScode" (`badasslighting.ma3dev`)?** This is the same project under a new name and extension ID. Uninstall the old one so the two don't both register completion and commands. The `ma3.*` settings keep their names.
 
+## Object trees
+
+Browse the grandMA2 (onPC 3.9.61.1) and grandMA3 (onPC 2.5.1.0) object trees online at [map.badass.lighting](https://map.badass.lighting) (free Google sign-in). For offline use, download the standalone page [`data/object-trees/index.html`](https://github.com/badasslighting/grandma-devkit/raw/main/data/object-trees/index.html) and open it in a browser; the data is embedded in the file.
+
 ## Which console
 
 The extension decides per Lua file: grandMA2 when the code calls `gma.*` or the plugin's manifest is a grandMA2 one (`<MA ...>`), grandMA3 otherwise. Set `ma3.target` to `ma2` or `ma3` to force it.
