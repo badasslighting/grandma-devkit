@@ -117,6 +117,49 @@ testMa3('object browser lists Root children through the bridge', async () => {
   assert.ok(total > 5 && items.some((i) => i.name === 'ShowData'), 'Root has ShowData');
 });
 
+const labelOf = (i) => (typeof i.label === 'string' ? i.label : i.label.label);
+
+test('property names and enum values complete inside Get/Set, and hover names the property', async () => {
+  const { doc } = await openLua('props.lua', 'local v = obj:Get("Na\nobj:Set("LOCK", "Y\nlocal n = obj:Get("NAME")\nlocal x = other("Na\n');
+  const names = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 21));
+  const nl = names.items.map(labelOf);
+  assert.ok(['NAME', 'NOTE', 'LOCK', 'INDEX'].every((n) => nl.includes(n)), `property names offered: ${nl.slice(0, 6)}`);
+  const name = names.items.find((i) => labelOf(i) === 'NAME');
+  assert.ok(/String/.test(name.detail), `type shown: ${name.detail}`);
+  const vals = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(1, 20));
+  const vl = vals.items.map(labelOf);
+  assert.ok(vl.includes('Yes') && vl.includes('No'), `enum values for LOCK: ${vl}`);
+  const other = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(3, 20));
+  assert.ok(!other.items.some((i) => labelOf(i) === 'NOTE'), 'no property names outside Get/Set');
+  const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', doc.uri, new vscode.Position(2, 20));
+  assert.ok(hovers.some((h) => h.contents.some((c) => /\*\*NAME\*\*/.test(c.value) && /String/.test(c.value))), 'hover shows the property');
+});
+
+const propsOutput = () =>
+  vscode.workspace.textDocuments
+    .filter((d) => d.uri.scheme === 'output' && /grandMA Properties/i.test(d.uri.path + d.uri.authority + d.uri.query))
+    .map((d) => d.getText())
+    .join('\n');
+
+test('Show Properties lists a grandMA2 class from the bundled schema', async () => {
+  await vscode.commands.executeCommand('ma3.objects.showProperties', { path: [1], target: 'ma2', addr: 'Root 2', cls: 'TIMECONFIG' });
+  const text = await until(() => (/Regard Daylight Saving/.test(propsOutput()) ? propsOutput() : ''), 'ma2 properties in the output channel');
+  assert.ok(/Hour/.test(text) && /On\/Off/.test(text), 'names and shapes listed');
+});
+
+testMa3('property completion narrows to the class of a Root() path, and Show Properties prints live values', async () => {
+  const { doc } = await openLua('propsLive.lua', 'Root().ShowData.DataPools[1]:Get("\n');
+  const narrowed = await until(async () => {
+    const r = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 37));
+    const l = r.items.map(labelOf);
+    return l.includes('NAME') && l.length < 60 ? l : null;
+  }, 'completion narrowed to the Pool class', 10000);
+  assert.ok(narrowed.includes('PREVIEWCOPY'), `Pool property offered: ${narrowed}`);
+  await vscode.commands.executeCommand('ma3.objects.showProperties', { path: [14, 14, 1], target: 'ma3', cls: 'Pool' });
+  const text = await until(() => (/live values from the console/.test(propsOutput()) && /NAME\s+String/.test(propsOutput()) ? propsOutput() : ''), 'live properties with the NAME row');
+  assert.ok(/NAME\s+String\s+rw/.test(text), 'NAME row with its type');
+});
+
 test('grandMA2: gma.* completes, hovers, shows signatures and lints', async () => {
   const { doc } = await openLua('ma2.lua', 'gma.\ngma.cmd("Go+")\ngma.feedbak("x")\nfor i = 1, 3 do gma.cmd("Go+") end\nreturn 1\n');
   const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 4));
