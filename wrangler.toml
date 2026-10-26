@@ -9,4 +9,3 @@ database_id = "REPLACE_WITH_DATABASE_ID"
 
 [vars]
 TURNSTILE_SITEKEY = "REPLACE_WITH_TURNSTILE_SITE_KEY"
-ADMIN_EMAILS = "admin@example.com"
