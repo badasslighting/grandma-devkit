@@ -5,7 +5,7 @@ pages_build_output_dir = "data/object-trees"
 [[d1_databases]]
 binding = "DB"
 database_name = "grandma-devkit-users"
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "3689e875-93b8-4cb8-b2c4-4d4408aa885e"
 
 [vars]
-TURNSTILE_SITEKEY = "REPLACE_WITH_TURNSTILE_SITE_KEY"
+TURNSTILE_SITEKEY = "0x4AAAAAAFmWaZ5Or4rtkw7u"
