@@ -21,7 +21,7 @@ const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus }
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget } = require('./lib/target');
 const { bumpVersion, zip } = require('./lib/release');
-const { stringContext, suggestKeywords } = require('./lib/cmdContext');
+const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
 const props = require('./lib/props');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
@@ -175,6 +175,20 @@ function activate(context) {
           }
           if (str) {
             if (!str.inCmd) return [];
+            const cmdTarget = targetOf(doc);
+            // Inside an open grandMA2 [condition]: comparison operators, then the closing bracket.
+            const cond = conditionSuggestions(str.text, cmdTarget);
+            if (cond) {
+              const typed = (/[<>=]*$/.exec(str.text) || [''])[0];
+              return cond.map((c) => {
+                const item = new vscode.CompletionItem(c.name, vscode.CompletionItemKind.Operator);
+                item.documentation = c.doc;
+                item.insertText = c.insert;
+                item.range = new vscode.Range(pos.line, pos.character - typed.length, pos.line, pos.character);
+                item.filterText = typed + c.name;
+                return item;
+              });
+            }
             const partial = (/[^\s]*$/.exec(str.text) || [''])[0];
             const range = new vscode.Range(pos.line, pos.character - partial.length, pos.line, pos.character);
             const items = suggestKeywords(str.text).map((k) => {
@@ -186,7 +200,15 @@ function activate(context) {
               return item;
             });
             // Real object numbers and labels from the running show, when the bridge is up (grandMA3 only).
-            const live = await getShow(false, targetOf(doc));
+            if (cmdTarget === 'ma2' && !str.text.trim()) {
+              const item = new vscode.CompletionItem('[condition]', vscode.CompletionItemKind.Snippet);
+              item.detail = 'run the rest of the line only if true (grandMA2)';
+              item.insertText = new vscode.SnippetString('[\\$${1:var}==${2:value}] $0');
+              item.sortText = '0';
+              item.range = range;
+              items.push(item);
+            }
+            const live = await getShow(false, cmdTarget);
             for (const o of showSuggestions(str.text, live)) {
               const item = new vscode.CompletionItem(o.no, vscode.CompletionItemKind.Value);
               item.detail = `${o.kind}: ${o.name}`;
@@ -344,6 +366,8 @@ function activate(context) {
       provideHover(doc, pos) {
         const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_]\w*/);
         if (!range) return null;
+        const cmdHover = commandHover(doc.lineAt(pos).text, pos.character, targetOf(doc));
+        if (cmdHover) return new vscode.Hover(new vscode.MarkdownString(cmdHover.markdown), new vscode.Range(pos.line, cmdHover.start, pos.line, cmdHover.end));
         const pa = targetOf(doc) === 'ma3' ? props.propAt(doc.lineAt(pos).text, pos.character) : null;
         const pinfo = pa && props.ma3Union().get(pa.name);
         if (pinfo) {

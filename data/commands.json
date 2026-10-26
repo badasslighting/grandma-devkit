@@ -73,7 +73,11 @@
   "modifier": [
     ["At", "Set a value: At 50, At Full, At Preset 1.1."],
     ["Thru", "A range: Fixture 1 Thru 10."],
-    ["If", "Conditional selection."],
+    ["If", "Filter: the command only acts on the objects that match what follows. Not a branch; use [$var==1] (grandMA2) or Lua for a condition."],
+    ["EndIf", "Ends an If filter early: Store If Group 5 EndIf Preset 1.1."],
+    ["IfOutput", "Filter: only objects that have output."],
+    ["IfActive", "Filter: only objects that are active."],
+    ["IfProg", "Filter: only objects that are in the programmer."],
     ["Full", "Full value."],
     ["Zero", "Zero value."],
     ["Home", "Home value."],
