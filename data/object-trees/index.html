@@ -151,7 +151,7 @@ header .sub { padding-right: 56px; }
     }else{
       var pr2=P.ma2[c];
       if(pr2)rows=pr2.map(function(p){return '<tr><td>'+esc(p[0])+'</td><td class="t">'+esc(p[1])+'</td><td>'+(p[2].length?esc(p[2].join(', ')):'')+'</td></tr>'}).join('');
-      else h+='<div class="dh">This node has no properties listed by the console.</div>';
+      else h+='<div class="dh">No properties captured for this node. The console lists a pool's properties from its items, and this pool was empty in the crawled show.</div>';
     }
     var th='<table><thead><tr><th>Property</th><th>Type</th><th>Values</th></tr></thead><tbody>';
     if(rows)h+=th+rows+'</tbody></table>';
