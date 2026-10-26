@@ -56,11 +56,12 @@ test('propValuesLua and parsePropValues round trip the console reply', () => {
   assert.match(p.propValuesLua([14, 14, 'x', -1]), /ipairs\(\{14, 14\}\)/);
   assert.match(p.pathClassLua(['ShowData', 'DataPools', 1]), /"ShowData", "DataPools", 1/);
   assert.throws(() => p.pathClassLua(['bad"name']));
-  const reply = '"Pool @@ NAME\tString\t0\t\tDefault\nLOCK\tUInt64\t0\tYesNo\tNo"';
+  // the shape the bridge really returns: a Lua %q string, tabs as \9 (\009 before a digit), newlines as backslash-newline
+  const reply = '"Pool @@ NAME\\9String\\0090\\9\\9Pool 1 \'Default\'\\\nLOCK\\9UInt64\\0090\\9YesNo\\9No"';
   assert.deepStrictEqual(p.parsePropValues([reply]), {
     cls: 'Pool',
     props: [
-      { name: 'NAME', type: 'String', readOnly: false, enumName: '', value: 'Default' },
+      { name: 'NAME', type: 'String', readOnly: false, enumName: '', value: "Pool 1 'Default'" },
       { name: 'LOCK', type: 'UInt64', readOnly: false, enumName: 'YesNo', value: 'No' },
     ],
   });
