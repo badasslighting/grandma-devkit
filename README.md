@@ -24,6 +24,24 @@ The extension decides per Lua file: grandMA2 when the code calls `gma.*` or the 
 - **Export Plugin to USB Stick** copies the manifest and Lua file(s) onto a removable drive in the folder the console reads: `<stick>/grandMA3/gma3_library/datapools/plugins` (or a `gma3_library` already at the root) for grandMA3, `<stick>/gma2/plugins` for grandMA2. It lists the removable drives, asks before replacing files, and can copy the console-side import command. `ma3.usb.path` sets a fixed stick or folder.
 - **Checks**: `while true do` loops that never yield (`coroutine.yield`, `gma.sleep`), break or return.
 
+### Conditional commands
+
+What each console does with a condition in a command string (`Cmd("...")`, `gma.cmd("...")`), checked on onPC (grandMA2 3.9.61.1, grandMA3 2.5.1.0):
+
+| | grandMA2 | grandMA3 |
+| --- | --- | --- |
+| `[$var==5] Off Page 3` | runs the rest of the line only if true; compares text; `==` `>` `<` `<=` `>=` | never runs |
+| `[$var=5]`, `[$var!=5]` | never true, so the line never runs | never runs |
+| `If` / `EndIf` / `IfOutput` / `IfActive` / `IfProg` | selection filters, not branches (`If $var==1 Go+` tests nothing) | same |
+| Condition in Lua | `gma.show.getvar` returns **text** (`"7"`) or nil | `GetVar(UserVars(), "x")` returns a number or text, as stored |
+
+The extension helps with this inside command strings:
+
+- **Completion**: on grandMA2, `[condition]` at the start of a string, comparison operators and `]` inside an open condition, and keyword completion after the closed condition; `If`, `EndIf`, `IfOutput`, `IfActive` and `IfProg` on both consoles, with the objects they filter offered after `If`.
+- **Hover**: the `If` family on both consoles; anything inside a grandMA2 `[condition]`.
+- **Checks**: on grandMA3 a `[condition]` prefix (`bracket-ma3`); on grandMA2 an unclosed or empty condition, a missing command, an unsupported operator, a missing operator; on both an `If` followed by a comparison (`if-not-branch`) and an `EndIf` with no `If`; on grandMA2 `gma.show.getvar(...)` compared with a number (`getvar-number`, quick fix wraps it in `tonumber`).
+- Snippets: `ma3if`, `ma2if` (Lua conditions around `Cmd` / `gma.cmd`) and `ma2cond` (a `[condition]` command line).
+
 ## grandMA3
 
 - **API completion, hover, signature help** for the global and object (`handle:Method()`) Lua API, built from the console's own `HelpLua` output. Run **Update API from Console (grandMA3)** (needs the bridge) to read the list from the running console with `GetApiDescriptor`, with a summary of what was added, removed or changed since the list you had; or **Import API from HelpLua File** to load `gma3_library/grandMA3_lua_functions.txt` by hand.
@@ -33,7 +51,7 @@ The extension decides per Lua file: grandMA2 when the code calls `gma.*` or the 
 - **grandMA3 Objects view** (Explorer sidebar; also grandMA2, see below): browse the console object tree (`Root()` and below). Right-click an object to copy its Lua path (`Root()[14][14]`), copy its address (`14.14`) or insert the path at the cursor. Hovering a node lists the properties of its class, and **Show Properties** prints each property with its type, read-only flag, enum collection and (grandMA3, bridge running) current value.
 - **Property completion and hover** (grandMA3): inside `obj:Get("...")`, `obj:Set("...", "...")`, `SetChildren` and `SetChildrenRecursive`, property names complete with their type and enum values, and `Set` offers the enum names the property accepts (`Yes`, `No`, `Off` and so on). A receiver written as a literal `Root()...` path is asked for its class, so the list shrinks to that object's properties; other receivers see every property name. Hover on a property name shows its type, read-only flag and values. The schema (657 classes, 409 enums from grandMA3 onPC 2.5.1, and grandMA2 3.9 class properties) is bundled in `data/props.json` and works without a console.
 - **Lua checks**: a misspelt API function (`printf` for `Printf`), an API function called with no arguments, `Cmd()` inside a loop, and heavy calls (`ObjectList`, `:Children()`, `CmdIndirectWait`) inside a `Timer` or `HookObjectChange` callback. `ma3.lint.globals` adds a hint for assignments without `local`.
-- Snippets: `ma3plugin`, `cmd`, `printf`, `forchildren`, `pcall`, `yield`.
+- Snippets: `ma3plugin`, `cmd`, `printf`, `forchildren`, `pcall`, `yield`, `ma3if`.
 
 ### OSC (grandMA3)
 
