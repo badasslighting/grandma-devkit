@@ -26,7 +26,7 @@ The extension decides per Lua file: grandMA2 when the code calls `gma.*` or the 
 
 ### Conditional commands
 
-What each console does with a condition in a command string (`Cmd("...")`, `gma.cmd("...")`), checked on onPC (grandMA2 3.9.61.1, grandMA3 2.5.1.0):
+What each console does with a condition in a command string (`Cmd("...")`, `gma.cmd("...")`), checked on onPC (grandMA2 3.9.x, grandMA3 2.5.x):
 
 | | grandMA2 | grandMA3 |
 | --- | --- | --- |
@@ -50,7 +50,7 @@ The extension helps with this inside command strings:
 
 ### Variables
 
-How each console handles a variable, checked on onPC (grandMA2 3.9.61.1, grandMA3 2.5.1.0):
+How each console handles a variable, checked on onPC (grandMA2 3.9.x, grandMA3 2.5.x):
 
 | | grandMA2 | grandMA3 |
 | --- | --- | --- |
@@ -89,13 +89,13 @@ What the extension does with them, in Lua `Cmd()` / `gma.cmd()` strings, `.gma2m
 - **Live completion** while the LuaBridge runs (`ma3.liveCompletion`; each lookup costs a few milliseconds of console time and is cached): real group, sequence, macro, preset, layout and timer numbers with their labels inside `Cmd` strings (**Refresh Show Objects for Completion** forces a refresh), `Enums.*` names and members, and attribute names inside `GetAttributeIndex("...")` and `Cmd("Attribute ...")`.
 - **Object path completion**: after a literal path such as `Root().ShowData.DataPools[1].`, the children and property names of that object complete from the console (only chains that start at `Root()`, with names, `[n]` indexes and `["name"]`; children whose names need `["..."]` are left out).
 - **grandMA3 Objects view** (Explorer sidebar; also grandMA2, see below): browse the console object tree (`Root()` and below). Right-click an object to copy its Lua path (`Root()[14][14]`), copy its address (`14.14`) or insert the path at the cursor. Hovering a node lists the properties of its class, and **Show Properties** prints each property with its type, read-only flag, enum collection and (grandMA3, bridge running) current value.
-- **Property completion and hover** (grandMA3): inside `obj:Get("...")`, `obj:Set("...", "...")`, `SetChildren` and `SetChildrenRecursive`, property names complete with their type and enum values, and `Set` offers the enum names the property accepts (`Yes`, `No`, `Off` and so on). A receiver written as a literal `Root()...` path is asked for its class, so the list shrinks to that object's properties; other receivers see every property name. Hover on a property name shows its type, read-only flag and values. The schema (657 classes, 409 enums from grandMA3 onPC 2.5.1, and grandMA2 3.9 class properties) is bundled in `data/props.json` and works without a console.
+- **Property completion and hover** (grandMA3): inside `obj:Get("...")`, `obj:Set("...", "...")`, `SetChildren` and `SetChildrenRecursive`, property names complete with their type and enum values, and `Set` offers the enum names the property accepts (`Yes`, `No`, `Off` and so on). A receiver written as a literal `Root()...` path is asked for its class, so the list shrinks to that object's properties; other receivers see every property name. Hover on a property name shows its type, read-only flag and values. The schema (657 classes, 409 enums from grandMA3 onPC 2.5.x, and grandMA2 3.9.x class properties) is bundled in `data/props.json` and works without a console.
 - **Lua checks**: a misspelt API function (`printf` for `Printf`), an API function called with no arguments, `Cmd()` inside a loop, and heavy calls (`ObjectList`, `:Children()`, `CmdIndirectWait`) inside a `Timer` or `HookObjectChange` callback. `ma3.lint.globals` adds a hint for assignments without `local`.
 - Snippets: `ma3plugin`, `cmd`, `printf`, `forchildren`, `pcall`, `yield`, `ma3if`.
 
 ### OSC (grandMA3)
 
-grandMA3 has no Telnet, but its OSC input runs command-line commands: a message to `/cmd` (or `/<prefix>/cmd`) with one string argument, including `Lua "..."`. OSC is one-way, with no return values and no error text, so Lua that needs results still goes through the bridge. Verified on grandMA3 onPC 2.5.1.
+grandMA3 has no Telnet, but its OSC input runs command-line commands: a message to `/cmd` (or `/<prefix>/cmd`) with one string argument, including `Lua "..."`. OSC is one-way, with no return values and no error text, so Lua that needs results still goes through the bridge. Verified on grandMA3 onPC 2.5.x.
 
 - **Enable OSC Command Input on Console** (needs the bridge running) switches OSC input on, accepts the `127.0.0.0/8` range and lets OSC line 1 run `/cmd`; **Disable OSC Command Input on Console** reverses it. **The console then listens on UDP port 8000 on all network interfaces**, so other machines on the network can send it commands, Lua included, unless a firewall blocks the port. Leave it off when you aren't using it, and use onPC with a throwaway show.
 - **Send Command to Console (OSC)** and **Send Selected Lines to Console as Commands (OSC)** send commands (spaced `ma3.osc.gapMs` apart) and log them in the **grandMA Console** panel. When the bridge is running the extension first checks OSC input is on; without it, UDP cannot tell a closed port from success. Settings: `ma3.osc.host`, `ma3.osc.port` (8000), `ma3.osc.prefix` (empty). `NewShow`, `LoadShow`, `Delete` and similar ask first.
@@ -104,7 +104,7 @@ grandMA3 has no Telnet, but its OSC input runs command-line commands: a message 
 
 ## grandMA2
 
-- **`gma.*` completion, hover and signature help** for the grandMA2 Lua API. grandMA2 has no HelpLua dump, so the list is curated from MA's documentation and what was seen working on onPC 3.9.61; a function missing from it is a gap in the list, not proof it doesn't exist. **Check grandMA2 API List Against Console** (needs LuaBridge_MA2) walks the real `gma` table and reports functions the list lacks and listed ones your console doesn't have.
+- **`gma.*` completion, hover and signature help** for the grandMA2 Lua API. grandMA2 has no HelpLua dump, so the list is curated from MA's documentation and what was seen working on onPC 3.9.x; a function missing from it is a gap in the list, not proof it doesn't exist. **Check grandMA2 API List Against Console** (needs LuaBridge_MA2) walks the real `gma` table and reports functions the list lacks and listed ones your console doesn't have.
 - **New grandMA2 Plugin** creates `Name/Name.lua` and a `<MA ...>` manifest with `<Plugin index name luafile />` (`ma3.ma2.version`, default 3.9.61, sets the manifest version).
 - **Deploy and Reload** imports over the slot (`Import "Name" At Plugin N /o /nc`, how grandMA2 reloads a plugin) and calls the plugin by name through the LuaBridge_MA2 plugin.
 - **Lua checks**: a misspelt `gma.*` function, a `gma.*` call with no arguments, and `gma.cmd()` inside a loop (it is synchronous, about 0.46 s per call on onPC).
@@ -112,7 +112,7 @@ grandMA3 has no Telnet, but its OSC input runs command-line commands: a message 
 
 ### Telnet (grandMA2)
 
-grandMA2 also has a Telnet command line (port 30000) and System Monitor (port 30001). The extension uses them for what the file bridge cannot do: starting the bridge itself, sending plain commands, and reading console messages. Lua you run to get return values still goes through the bridge. Telnet is plain text, so keep it to onPC on this machine or a trusted network. Verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen on these ports.
+grandMA2 also has a Telnet command line (port 30000) and System Monitor (port 30001). The extension uses them for what the file bridge cannot do: starting the bridge itself, sending plain commands, and reading console messages. Lua you run to get return values still goes through the bridge. Telnet is plain text, so keep it to onPC on this machine or a trusted network. Verified on grandMA2 onPC 3.9.x; grandMA3 onPC does not listen on these ports.
 
 Enable Telnet (the remote command line) on the console and set `ma3.telnet.user` to the user profile to log in as. Many profiles have no password; if yours does, run **Set Telnet Password** (stored in VS Code's secret storage, never in settings). Settings: `ma3.telnet.host`, `ma3.telnet.port` (30000), `ma3.telnet.monitorPort` (30001), `ma3.telnet.gapMs` (400; the console drops lines that arrive faster).
 
