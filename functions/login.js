@@ -22,7 +22,6 @@ button{width:100%;padding:12px;border:0;border-radius:8px;background:var(--acc);
 <label class="opt"><input type="checkbox" name="newsletter" value="1"> Send me news and updates from Badass Lighting Tools (BLT). You can unsubscribe at any time.</label>
 <button type="submit">Sign in with Google</button></form>
 ${err ? `<div class="err">${esc(err)}</div>` : ''}
-<small>We store your email and name to count visitors. Nothing is shared.</small>
 </main></body></html>`;
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
