@@ -8,7 +8,7 @@ Unofficial community tool, not affiliated with or endorsed by MA Lighting. grand
 
 ## Object trees
 
-Browse the grandMA2 (onPC 3.9.61.1) and grandMA3 (onPC 2.5.1.0) object trees online at [map.badass.lighting](https://map.badass.lighting) (free Google sign-in). For offline use, download the standalone page [`data/object-trees/index.html`](https://github.com/badasslighting/grandma-devkit/raw/main/data/object-trees/index.html) and open it in a browser; the data is embedded in the file.
+Browse the grandMA2 (onPC 3.9.61.1) and grandMA3 (onPC 2.5.1.0) object trees online at [map.badass.lighting](https://map.badass.lighting) (free Google sign-in). For offline use, [download the standalone page](https://github.com/badasslighting/grandma-devkit/releases/latest/download/grandma-object-trees.html) (one HTML file) and open it in a browser; the data is embedded in the file.
 
 ## Which console
 
