@@ -4,7 +4,9 @@ CREATE TABLE IF NOT EXISTS users (
   first_seen INTEGER NOT NULL,
   last_seen  INTEGER NOT NULL,
   visits     INTEGER NOT NULL DEFAULT 1,
-  blocked    INTEGER NOT NULL DEFAULT 0
+  blocked    INTEGER NOT NULL DEFAULT 0,
+  mailing_opt_in    INTEGER NOT NULL DEFAULT 0,
+  mailing_opt_in_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS sessions (
   id      TEXT PRIMARY KEY,
