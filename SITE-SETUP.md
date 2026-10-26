@@ -19,5 +19,6 @@ Sign-in with Google, a D1 user table, a Turnstile bot check, and everything (inc
 ## Using it
 
 - User list (no web endpoint, by design): `npx wrangler d1 execute grandma-devkit-users --remote --command "SELECT * FROM users ORDER BY last_seen DESC"`, or use the D1 console in the dashboard. Add `--json` to export.
+- Encrypted export: `node scripts/export-users.js keygen` once and save the key in Bitwarden. Then `USERS_EXPORT_KEY=<key> node scripts/export-users.js export` writes `~/Documents/exports/users-DATE.csv.enc` (AES-256-GCM; no plaintext on disk) and is safe to keep in Google Drive. `USERS_EXPORT_KEY=<key> node scripts/export-users.js decrypt <file>` prints the CSV. Needs `npx wrangler login` once.
 - Block someone: D1 Console, `UPDATE users SET blocked = 1 WHERE email = '...';`
 - Sessions last 7 days; `/logout` ends one.
