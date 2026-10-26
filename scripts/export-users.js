@@ -15,15 +15,15 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const DB = 'grandma-devkit-users';
-const QUERY = 'SELECT email, name, first_seen, last_seen, visits, blocked FROM users ORDER BY last_seen DESC';
+const QUERY = 'SELECT email, name, first_seen, last_seen, visits, blocked, mailing_opt_in, mailing_opt_in_at FROM users ORDER BY last_seen DESC';
 const MAGIC = Buffer.from('GDUX1');
 
 function toCsv(rows) {
   // Prefix formula-looking cells so a spreadsheet won't run them.
   const q = v => '"' + String(v ?? '').replace(/^[=+\-@]/, "'$&").replace(/"/g, '""') + '"';
   const iso = t => new Date(t * 1000).toISOString();
-  const head = 'email,name,first_seen,last_seen,visits,blocked';
-  return [head, ...rows.map(r => [r.email, r.name, iso(r.first_seen), iso(r.last_seen), r.visits, r.blocked].map(q).join(','))].join('\n') + '\n';
+  const head = 'email,name,first_seen,last_seen,visits,blocked,mailing_opt_in,mailing_opt_in_at';
+  return [head, ...rows.map(r => [r.email, r.name, iso(r.first_seen), iso(r.last_seen), r.visits, r.blocked, r.mailing_opt_in, r.mailing_opt_in_at ? iso(r.mailing_opt_in_at) : ''].map(q).join(','))].join('\n') + '\n';
 }
 
 function parseKey(b64) {
