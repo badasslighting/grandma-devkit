@@ -1,0 +1,3 @@
+# Files the Pages site needs to run; see ~/.githooks/guard-required.sh
+wrangler.toml
+functions/
