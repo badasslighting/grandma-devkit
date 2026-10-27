@@ -13,7 +13,7 @@ export async function sha256(text) {
 
 export function getCookie(request, name) {
   const m = (request.headers.get('Cookie') || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
-  return m ? decodeURIComponent(m[1]) : null;
+  try { return m ? decodeURIComponent(m[1]) : null; } catch { return null; }
 }
 
 export function cookie(name, value, maxAge) {
@@ -34,6 +34,12 @@ export function withHeaders(response) {
 }
 
 export async function currentUser(request, env) {
+  const verified = getCookie(request, 'verified');
+  if (verified && /^[a-f0-9]{64}$/.test(verified)) {
+    const session = await env.DB.prepare('SELECT expires FROM verified_sessions WHERE id = ? AND expires > ?')
+      .bind(await sha256(verified), Math.floor(Date.now() / 1000)).first();
+    if (session) return { verified: true };
+  }
   const token = getCookie(request, 'sid');
   if (!token) return null;
   const now = Math.floor(Date.now() / 1000);
@@ -41,6 +47,14 @@ export async function currentUser(request, env) {
     `SELECT u.email, u.name FROM sessions s JOIN users u ON u.email = s.email
      WHERE s.id = ? AND s.expires > ? AND u.blocked = 0`
   ).bind(await sha256(token), now).first();
+}
+
+// Referrer-Policy: no-referrer makes browsers send "Origin: null" on same-origin form posts,
+// so fall back to Sec-Fetch-Site, which browsers set themselves and pages cannot forge.
+export function sameOrigin(request) {
+  const origin = request.headers.get('Origin');
+  if (origin && origin !== 'null') return origin === new URL(request.url).origin;
+  return request.headers.get('Sec-Fetch-Site') === 'same-origin';
 }
 
 const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
