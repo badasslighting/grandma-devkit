@@ -13,7 +13,7 @@ export async function sha256(text) {
 
 export function getCookie(request, name) {
   const m = (request.headers.get('Cookie') || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
-  return m ? decodeURIComponent(m[1]) : null;
+  try { return m ? decodeURIComponent(m[1]) : null; } catch { return null; }
 }
 
 export function cookie(name, value, maxAge) {
@@ -34,6 +34,12 @@ export function withHeaders(response) {
 }
 
 export async function currentUser(request, env) {
+  const verified = getCookie(request, 'verified');
+  if (verified && /^[a-f0-9]{64}$/.test(verified)) {
+    const session = await env.DB.prepare('SELECT expires FROM verified_sessions WHERE id = ? AND expires > ?')
+      .bind(await sha256(verified), Math.floor(Date.now() / 1000)).first();
+    if (session) return { verified: true };
+  }
   const token = getCookie(request, 'sid');
   if (!token) return null;
   const now = Math.floor(Date.now() / 1000);

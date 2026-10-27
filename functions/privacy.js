@@ -1,26 +1,13 @@
 import { esc } from './_lib.js';
-
-export async function onRequestGet({ env }) {
-  const contact = env.CONTACT_EMAIL
-    ? `<p>To see or delete your data, email <a href="mailto:${esc(env.CONTACT_EMAIL)}">${esc(env.CONTACT_EMAIL)}</a>.</p>`
-    : '';
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy</title>
-<style>
-:root{--bg:#f6f5f2;--fg:#1c1b19;--acc:#8a6508}
-@media (prefers-color-scheme:dark){:root{--bg:#14161a;--fg:#e8e6e1;--acc:#e0b34a}}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}
-main{max-width:640px;margin:0 auto;padding:32px 16px}a{color:var(--acc)}h1{font-size:1.4rem}
-</style></head><body><main>
-<h1>Privacy</h1>
-<p>grandMA Object Trees is run by Badass Lighting Tools (BLT).</p>
-<p><b>What we keep.</b> When you sign in with Google we keep your email address and name, when you first and last signed in, and how many times you have. Your Google password is never shared with us.</p>
-<p><b>Why.</b> To let you in, to keep crawlers and bots from using up bandwidth, and to see how many people use the page.</p>
-<p><b>Mailing list.</b> If you tick the box on the sign-in page we also record that you agreed, and the date, so we can send you BLT news. You can unsubscribe at any time. If you leave it unticked we won't email you.</p>
-<p><b>Who sees it.</b> Only BLT. We don't sell or share it. The page runs on Cloudflare and sign-in uses Google, which handle your data as our service providers.</p>
-<p><b>How long.</b> Sign-in sessions last 7 days. Your record stays until you ask us to delete it.</p>
-${contact}
-<p><a href="/login">Back to sign in</a></p>
-</main></body></html>`;
-  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+export function onRequestGet({ env }) {
+  const contact = env.CONTACT_EMAIL || 'justin@badass.lighting';
+  return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy · BLT</title>
+<style>body{font:16px/1.6 system-ui;max-width:640px;margin:40px auto;padding:0 20px;color:#242424;background:#f6f5f2}a{color:inherit}</style>
+<h1>Privacy</h1><p>grandMA Object Trees is run by Badass Lighting Tools (BLT).</p>
+<p><b>Access.</b> Cloudflare Turnstile checks that requests are legitimate. After verification, we store a random session identifier in a secure cookie and its hashed value and expiry in our Cloudflare database. Sessions last 7 days. No Google account, name, or email is required.</p>
+<p><b>Newsletter.</b> Only if you submit the separate signup form and give consent, we save your email address and the time you agreed to receive BLT updates. Signup is optional and does not affect access. Email addresses submitted through this form are not verified as belonging to the person submitting them.</p>
+<p><b>Your choices.</b> To unsubscribe or request deletion of your information, email <a href="mailto:${esc(contact)}">${esc(contact)}</a>. Newsletter records are retained until you request removal. Expired verification records are removed when new sessions are created. Visit <a href="/logout">end session</a> to remove your current access cookie and session.</p>
+<p><b>Services.</b> The site and database run on Cloudflare, which also processes requests for security and verification. Support links open Buy Me a Coffee, a separate service with its own privacy practices.</p>
+<p><b>Previous sign-ins.</b> Records from the former Google sign-in system have not been deleted by this change. If you used it previously, BLT may still hold your email, name, visit counts and any newsletter consent. You can request their deletion using the address above.</p>
+<p><a href="/login">Back to the object trees</a></p></html>`, {headers:{'Content-Type':'text/html; charset=utf-8'}});
 }
