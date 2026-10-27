@@ -1,0 +1,14 @@
+# Cloudflare Pages config for map.badass.lighting. The site stops working without this file (D1 binding, Turnstile key, output dir) - do not delete.
+# The D1 id and site key are identifiers, not credentials; secrets live in Pages env vars. Schema, migrations and tests are kept in the private shared repo.
+name = "grandma-devkit-trees"
+compatibility_date = "2024-09-01"
+pages_build_output_dir = "data/object-trees"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "grandma-devkit-users"
+database_id = "REPLACE_WITH_DATABASE_ID"
+
+[vars]
+TURNSTILE_SITEKEY = "0x4AAAAAAFmWaZ5Or4rtkw7u"
+COFFEE_URL = "https://buymeacoffee.com/badasslightingtools"
