@@ -1,7 +1,8 @@
+import { trustedFormOrigin } from '../_lib.js';
 export async function onRequestPost({ request, env }) {
-  const url = new URL(request.url);
-  const fail = message => Response.redirect(url.origin + '/login?error=' + encodeURIComponent(message), 303);
-  if (request.headers.get('Origin') !== url.origin) return new Response('Invalid origin', {status:403});
+  const origin = trustedFormOrigin(request);
+  if (!origin) return new Response('Invalid origin', {status:403});
+  const fail = message => Response.redirect(origin + '/login?error=' + encodeURIComponent(message), 303);
   let form;
   try { form = await request.formData(); } catch { return fail('Please try signing up again.'); }
   const email = String(form.get('email') || '').trim().toLowerCase();
@@ -12,10 +13,10 @@ export async function onRequestPost({ request, env }) {
     method:'POST', signal:AbortSignal.timeout(10000),
     body:new URLSearchParams({secret:env.TURNSTILE_SECRET,response:token,remoteip:request.headers.get('CF-Connecting-IP')||''}),
   }).then(r => r.ok ? r.json() : {success:false}).catch(() => ({success:false}));
-  if (!result.success || result.hostname !== url.hostname || result.action !== 'newsletter') return fail('Newsletter verification failed or expired. Please try again.');
+  if (!result.success || result.hostname !== new URL(origin).hostname || result.action !== 'newsletter') return fail('Newsletter verification failed or expired. Please try again.');
   try {
     await env.DB.prepare('INSERT INTO newsletter_signups (email, consent_at) VALUES (?, ?) ON CONFLICT(email) DO NOTHING')
       .bind(email, Math.floor(Date.now()/1000)).run();
   } catch { return fail('We could not save your signup. You can still open the object trees above.'); }
-  return Response.redirect(url.origin + '/login?subscribed=1', 303);
+  return Response.redirect(origin + '/login?subscribed=1', 303);
 }
