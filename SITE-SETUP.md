@@ -1,6 +1,6 @@
 # Hosting the object trees on Cloudflare Pages
 
-map.badass.lighting uses Turnstile to grant anonymous access for seven days. No Google login is needed. Both pages and tree data require a server-side session. The combined access form has one Turnstile check and optional newsletter email/consent. The public BLT and Badass Lighting logo PNGs are served from data/object-trees/brand/ without requiring a session.
+map.badass.lighting uses Turnstile to grant anonymous access for seven days. No Google login is needed. Both pages and tree data require a server-side session.
 
 ## Deployment
 
@@ -15,7 +15,7 @@ map.badass.lighting uses Turnstile to grant anonymous access for seven days. No 
 
 ## Newsletter
 
-The combined access form lets visitors leave email and consent blank. If an email is entered, unchecked consent is rejected; verified signup and anonymous-session writes share a D1 batch. The legacy /auth/newsletter endpoint still requires separate Turnstile verification for existing clients. Email opt-in is never required for tree access. No emails are sent by this code. Addresses are self-reported; use confirmed opt-in in your mailing service before sending campaigns.
+The optional email field on the sign-in form (typing an address is the opt-in) is saved by /auth/start after Turnstile passes. It stores email and consent time in newsletter_signups. It never grants or blocks tree access. No emails are sent by this code. Addresses are self-reported; use confirmed opt-in in your mailing service before sending campaigns.
 
 Export newsletter_signups for new signups. Historical Google users remain in users and are handled by export-users.js. Remove unsubscribed addresses from newsletter_signups and any mailing service. The privacy notice provides the contact address for removal requests.
 
@@ -23,8 +23,6 @@ Export newsletter_signups for new signups. Historical Google users remain in use
 
 - /logout removes the current anonymous and legacy sessions and their cookies.
 - Expired anonymous sessions are pruned on new verification.
-- Keep rate limiting on /login and /auth/start; also cover /auth/newsletter.
-- POST origin checks accept only the exact trusted https://map.badass.lighting and https://grandma-devkit-trees.pages.dev origins; Referer is used only if Origin is absent. This tolerates Cloudflare request-URL rewriting without disabling CSRF protection.
-- Brand assets originated in badasslighting/shared: BLT-Brand/blt-logo.png and badass-logo-1400x600.png.
+- Keep rate limiting on /login and /auth/start; also cover /auth/start.
 - Run node --test test/siteAuth.test.js for focused authentication and consent tests.
 - Use Cloudflare test keys only in an isolated local/preview environment, never production.

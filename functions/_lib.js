@@ -49,6 +49,14 @@ export async function currentUser(request, env) {
   ).bind(await sha256(token), now).first();
 }
 
+// Referrer-Policy: no-referrer makes browsers send "Origin: null" on same-origin form posts,
+// so fall back to Sec-Fetch-Site, which browsers set themselves and pages cannot forge.
+export function sameOrigin(request) {
+  const origin = request.headers.get('Origin');
+  if (origin && origin !== 'null') return origin === new URL(request.url).origin;
+  return request.headers.get('Sec-Fetch-Site') === 'same-origin';
+}
+
 const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ENTITIES[c]);
 

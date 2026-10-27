@@ -9,4 +9,4 @@ database_id = "REPLACE_WITH_DATABASE_ID"
 
 [vars]
 TURNSTILE_SITEKEY = "0x4AAAAAAFmWaZ5Or4rtkw7u"
-COFFEE_URL = "https://www.buymeacoffee.com/badasslightingtools"
+COFFEE_URL = "https://buymeacoffee.com/badasslightingtools"
