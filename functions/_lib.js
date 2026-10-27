@@ -51,3 +51,23 @@ export async function currentUser(request, env) {
 
 const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ENTITIES[c]);
+
+
+// Trust public Pages hostnames, not a potentially rewritten request.url origin.
+// Fall back to Referer only when a browser omits the Origin header.
+// Unknown or explicit cross-site origins remain rejected (CSRF protection).
+const TRUSTED_FORM_ORIGINS = new Set([
+  'https://map.badass.lighting',
+  'https://grandma-devkit-trees.pages.dev',
+]);
+export function trustedFormOrigin(request) {
+  if (request.headers.get('Sec-Fetch-Site') === 'cross-site') return null;
+  const origin = request.headers.get('Origin');
+  if (origin !== null) return TRUSTED_FORM_ORIGINS.has(origin) ? origin : null;
+  const referer = request.headers.get('Referer');
+  if (!referer) return null;
+  try {
+    const value = new URL(referer).origin;
+    return TRUSTED_FORM_ORIGINS.has(value) ? value : null;
+  } catch { return null; }
+}
