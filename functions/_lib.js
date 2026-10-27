@@ -13,7 +13,7 @@ export async function sha256(text) {
 
 export function getCookie(request, name) {
   const m = (request.headers.get('Cookie') || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
-  return m ? decodeURIComponent(m[1]) : null;
+  try { return m ? decodeURIComponent(m[1]) : null; } catch { return null; }
 }
 
 export function cookie(name, value, maxAge) {
@@ -34,6 +34,12 @@ export function withHeaders(response) {
 }
 
 export async function currentUser(request, env) {
+  const verified = getCookie(request, 'verified');
+  if (verified && /^[a-f0-9]{64}$/.test(verified)) {
+    const session = await env.DB.prepare('SELECT expires FROM verified_sessions WHERE id = ? AND expires > ?')
+      .bind(await sha256(verified), Math.floor(Date.now() / 1000)).first();
+    if (session) return { verified: true };
+  }
   const token = getCookie(request, 'sid');
   if (!token) return null;
   const now = Math.floor(Date.now() / 1000);
@@ -45,3 +51,23 @@ export async function currentUser(request, env) {
 
 const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ENTITIES[c]);
+
+
+// Trust public Pages hostnames, not a potentially rewritten request.url origin.
+// Fall back to Referer only when a browser omits the Origin header.
+// Unknown or explicit cross-site origins remain rejected (CSRF protection).
+const TRUSTED_FORM_ORIGINS = new Set([
+  'https://map.badass.lighting',
+  'https://grandma-devkit-trees.pages.dev',
+]);
+export function trustedFormOrigin(request) {
+  if (request.headers.get('Sec-Fetch-Site') === 'cross-site') return null;
+  const origin = request.headers.get('Origin');
+  if (origin !== null) return TRUSTED_FORM_ORIGINS.has(origin) ? origin : null;
+  const referer = request.headers.get('Referer');
+  if (!referer) return null;
+  try {
+    const value = new URL(referer).origin;
+    return TRUSTED_FORM_ORIGINS.has(value) ? value : null;
+  } catch { return null; }
+}
