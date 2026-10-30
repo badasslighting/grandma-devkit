@@ -6,8 +6,6 @@ Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/item
 
 Unofficial community tool, not affiliated with or endorsed by MA Lighting. grandMA2 and grandMA3 are trademarks of MA Lighting International GmbH.
 
-**Upgrading from "MA3dev for VScode" (`badasslighting.ma3dev`)?** This is the same project under a new name and extension ID. Uninstall the old one so the two don't both register completion and commands. The `ma3.*` settings keep their names.
-
 ## Object trees
 
 Browse the grandMA2 (onPC 3.9.61.1) and grandMA3 (onPC 2.5.1.0) object trees online at [map.badass.lighting](https://map.badass.lighting). For offline use, [download the standalone page](https://github.com/badasslighting/grandma-devkit/releases/latest/download/grandma-object-trees.html) (one HTML file) and open it in a browser; the data is embedded in the file.
