@@ -2,7 +2,7 @@
   "name": "grandma-devkit",
   "displayName": "Devkit for Grand MA2+MA3",
   "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -144,7 +144,7 @@
           "type": "string",
           "enum": ["auto", "ma3", "ma2"],
           "default": "auto",
-          "markdownDescription": "Which console a Lua file is written for. `auto` picks grandMA2 when the code calls `gma.*` or the plugin's manifest is a grandMA2 one (`<MA ...>`), and grandMA3 otherwise."
+          "markdownDescription": "Which console a Lua file is written for. `auto` looks at, in order: the plugin manifest (`<MA ...>` is grandMA2, `<GMA3 ...>` is grandMA3), the folder name (grandMA2 / gma2 / MA2 or grandMA3 / gma3 / MA3), and the API names in the code (`gma.*` is grandMA2, `Printf(` and `Cmd(` are grandMA3); grandMA3 if none say anything. Set `ma2` or `ma3` to override."
         },
         "ma3.telnet.host": {
           "type": "string",

@@ -43,6 +43,45 @@ test('grandMA2 bracket conditions: valid ones pass, the rest are flagged', () =>
   assert.deepStrictEqual(check('[$v=="a=b"] Go+', 'ma2'), []);
 });
 
+test('grandMA2 grouped conditions: only the first comparison counts, the logic operator is flagged', () => {
+  const at = (text, target = 'ma2') => checkCommand(text, target).map((f) => [f.rule, f.offset, f.len]);
+  assert.deepStrictEqual(at('[$a==1 && $b==2] Go+'), [['bracket-logic', 7, 2]]);
+  assert.deepStrictEqual(at('[$a==1 || $b==2] Go+'), [['bracket-logic', 7, 2]]);
+  assert.deepStrictEqual(at('[$a==1 AND $b==2] Go+'), [['bracket-logic', 7, 3]]);
+  assert.deepStrictEqual(at('[($a==1) && ($b==2)] Go+'), [['bracket-logic', 9, 2]]);
+  assert.deepStrictEqual(at('[$a==1 || $b==2 && $c==3] Go+'), [['bracket-logic', 7, 2]]); // the first operator is the one reported
+  assert.deepStrictEqual(at('[$a=="x && y"] Go+'), []); // && inside quotes is text
+  assert.deepStrictEqual(at('[$a=="x || y"] Go+'), []);
+  // grandMA3 only sees a [condition] line, however it is grouped
+  assert.deepStrictEqual(check('[$a==1 && $b==2] Go+', 'ma3'), ['bracket-ma3']);
+  assert.deepStrictEqual(check('[($a==1) || ($b==2)] Go+', 'ma3'), ['bracket-ma3']);
+});
+
+test('[$x] without an operator is a warning on that one condition and nothing else', () => {
+  const f = checkCommand('[$x] Go+', 'ma2');
+  assert.deepStrictEqual(f.map((x) => [x.rule, x.offset, x.len, x.severity]), [['bracket-no-operator', 0, 4, 'warning']]);
+  assert.strictEqual(f[0].fix, undefined); // no automatic fix: there is no operator to guess
+  assert.deepStrictEqual(check('[$x]Go+', 'ma2'), ['bracket-no-operator']);
+  assert.deepStrictEqual(check('[$x]', 'ma2'), ['bracket-no-operator', 'bracket-no-command']);
+  assert.deepStrictEqual(check('[$x] Go+', 'ma3'), ['bracket-ma3']);
+  assert.deepStrictEqual(rules('Cmd("[$x] Go+")', 'ma2'), ['bracket-no-operator@0']);
+});
+
+test('a "]" in quotes: inside the condition it ends it on grandMA2, in the command after it is harmless', () => {
+  const at = (text) => checkCommand(text, 'ma2').map((f) => [f.rule, f.offset, f.len]);
+  assert.deepStrictEqual(at('[$x=="a]b"] Go+'), [['bracket-quote', 7, 1]]);
+  assert.deepStrictEqual(at('[$x=="a]b"] Label "c]d"'), [['bracket-quote', 7, 1]]); // only the one inside the bracket
+  assert.deepStrictEqual(at('[$x==\\"a]b\\"] Go+'), [['bracket-quote', 8, 1]]); // Lua-escaped quotes
+  assert.deepStrictEqual(at('[$x==1] Label Macro 1 "a]b"'), []);
+  assert.deepStrictEqual(at('[$x==1] Label "a]b" ; Go+'), []);
+  assert.deepStrictEqual(at('[$x==1] Label "a]b" [$y==2] Go+'), []);
+  assert.strictEqual(afterCondition('[$x==1] Label "a]b"'), ' Label "a]b"');
+  assert.strictEqual(parseBracket('[$x==1] Label "a]b"').end, 6);
+  // grandMA3 only warns about the leading [condition], not the ] in the command
+  assert.deepStrictEqual(check('[$x==1] Label "a]b"', 'ma3'), ['bracket-ma3']);
+  assert.deepStrictEqual(rules('Cmd("[$x==1] Label Macro 1 \\"a]b\\"")', 'ma2'), []);
+});
+
 test('grandMA3 does not run [condition] lines', () => {
   assert.deepStrictEqual(check('[$v==5] Go+', 'ma3'), ['bracket-ma3']);
   assert.deepStrictEqual(check('[$v==5] Go+', undefined), ['bracket-ma3']);

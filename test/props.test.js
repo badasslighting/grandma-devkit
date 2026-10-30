@@ -72,3 +72,26 @@ test('the bundled data has no station-specific strings', () => {
   const text = JSON.stringify(require('../data/props.json'));
   assert.doesNotMatch(text, /\b\d{1,3}(\.\d{1,3}){3}\b|([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}/);
 });
+
+test('grandMA2 properties: On/Off and Yes/No list their values, observed samples are marked e.g.', () => {
+  const rows = p.ma2Props('TimeConfig');
+  const onOff = rows.find((p) => p.type === 'On/Off');
+  assert.deepStrictEqual(onOff.values, ['On', 'Off']);
+  assert.strictEqual(p.ma2ValuesText(onOff), 'On, Off');
+  const yesNo = p.ma2Props('Stations').find((p) => p.type === 'Yes/No');
+  if (yesNo) assert.strictEqual(p.ma2ValuesText(yesNo), 'Yes, No');
+  const sample = p.ma2Props('LayoutElementDefaults').find((p) => p.name === 'FontSize');
+  assert.strictEqual(p.ma2ValuesText(sample), 'Default, Small, Big'); // confirmed on a console: the three font sizes
+  const symbol = p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'Symbol');
+  assert.strictEqual(p.ma2ValuesText(symbol), 'e.g. Small, Big'); // Fit is refused on onPC 3.9.61.1
+  const byName = (c, n) => p.ma2Props(c).find((x) => x.name === n);
+  assert.strictEqual(p.ma2ValuesText(byName('LayoutElementDefaults', 'Visualization')), 'Pool icon, Filled, None, Spot');
+  assert.strictEqual(p.ma2ValuesText(byName('LayoutElementDefaults', 'ImageSize')), 'Small, Big, Fit');
+  assert.strictEqual(p.ma2ValuesText(byName('Display', 'Readout')), 'e.g. Natural, Percent, Decimal, Hex');
+  assert.strictEqual(p.ma2ValuesText(p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'BackgroundColor')), ''); // an RGB colour, not a list
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_DMX_UNIVERSE', 'DMX In Merge')), 'HTP, Off, LoTP'); // read off the console dropdown, then written and read back
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_PSN_SYSTEM', 'X map')), 'X, Y, Z'); // an axis choice, not a coordinate; numbers 0-2 index the same list
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_MACRO_LINE_OBJECT', 'Wait')), 'e.g. Follow, Go'); // Follow is also a console keyword: values are written quoted
+  assert.strictEqual(p.ma2ValuesText(rows.find((p) => p.type === 'text')), '');
+  assert.match(p.propsMarkdown('TimeConfig', rows), /\| RegardDaylightSaving \| On\/Off \| On, Off \|/);
+});

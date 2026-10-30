@@ -19,13 +19,14 @@ const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = r
 const { ma2TreeLua, parseMa2Tree, ma2Address, ma2ShowLua } = require('./lib/ma2Objects');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
-const { detectTarget } = require('./lib/target');
+const { detectTarget, detectTargetForFile } = require('./lib/target');
 const varFeatures = require('./lib/varFeatures');
 const { macroKind } = require('./lib/macroFiles');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
 const props = require('./lib/props');
+const enums = require('./lib/enums');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
 const { enumNamesLua, enumMembersLua, attributeNamesLua, parseNames, parseMembers, enumContext, attributeContext } = require('./lib/liveNames');
 const bridge = require('./lib/bridge');
@@ -37,42 +38,42 @@ const pluginsFolder = () => cfg().get('pluginsPath') || defaultPluginsPath();
 const ma2PluginsFolder = () => cfg().get('ma2.pluginsPath') || defaultMa2PluginsPath();
 const bridgeDirFor = (target) => (target === 'ma2' ? cfg().get('ma2.bridgeDir') || defaultBridgeDirMa2() : cfg().get('bridge.dir') || defaultBridgeDir());
 
-// Which console a Lua document targets: the ma3.target setting, `gma.` calls in the code, or the
-// manifest next to it (looked up at most every few seconds).
-const manifestHint = new Map();
-function targetOf(doc) {
-  const text = doc.getText();
-  const setting = cfg().get('target');
-  const quick = detectTarget(text, setting);
-  if (setting !== 'auto' || quick === 'ma2' || doc.isUntitled) return quick;
-  const dir = path.dirname(doc.fileName);
-  const hit = manifestHint.get(dir);
-  if (!hit || Date.now() - hit.at > 3000) {
-    let xml = '';
-    try {
-      const m = findManifest(doc.fileName);
-      xml = m ? fs.readFileSync(m, 'utf8') : '';
-    } catch (_) {
-      /* no manifest */
+// Which console a Lua document targets (lib/target.js has the order of the signals): the ma3.target
+// setting, the manifest that lists the file, the folder it is in, then the API names in the code.
+// The manifests of a folder are read once and kept (a workspace scan asks for every Lua file in it): the cache is
+// emptied when any .xml file changes and expires after half a minute.
+const MANIFEST_TTL_MS = 30000;
+const manifestCache = new Map();
+function manifestEntries(dir) {
+  const hit = manifestCache.get(dir);
+  if (hit && Date.now() - hit.at < MANIFEST_TTL_MS) return hit.list;
+  const list = [];
+  try {
+    for (const entry of fs.readdirSync(dir)) {
+      if (!entry.toLowerCase().endsWith('.xml')) continue;
+      try {
+        const manifest = path.join(dir, entry);
+        list.push({ xml: fs.readFileSync(manifest, 'utf8'), names: filesForManifest(manifest).map((f) => path.basename(f).toLowerCase()) });
+      } catch (_) {
+        /* not a plugin manifest */
+      }
     }
-    manifestHint.set(dir, { at: Date.now(), xml });
-    return detectTarget(text, setting, xml);
+  } catch (_) {
+    /* no such folder */
   }
-  return detectTarget(text, setting, hit.xml);
+  manifestCache.set(dir, { at: Date.now(), list });
+  return list;
 }
-// The same decision for a file that is not open: the code, then the manifest next to it.
+function targetOf(doc) {
+  const setting = cfg().get('target');
+  if (setting !== 'auto' || doc.isUntitled) return detectTarget(doc.getText(), setting);
+  return detectTargetForFile(doc.getText(), setting, doc.fileName, manifestEntries(path.dirname(doc.fileName)));
+}
+// The same decision for a file that is not open.
 function targetOfFile(text, fileName) {
   const setting = cfg().get('target');
-  const quick = detectTarget(text, setting);
-  if (setting !== 'auto' || quick === 'ma2') return quick;
-  let xml = '';
-  try {
-    const m = findManifest(fileName);
-    xml = m ? fs.readFileSync(m, 'utf8') : '';
-  } catch (_) {
-    /* no manifest */
-  }
-  return detectTarget(text, setting, xml);
+  if (setting !== 'auto') return detectTarget(text, setting);
+  return detectTargetForFile(text, setting, fileName, manifestEntries(path.dirname(fileName)));
 }
 const manifestIsMa2 = (manifest) => {
   try {
@@ -92,6 +93,9 @@ function activate(context) {
   let index = loadApi(context);
   const diagnostics = vscode.languages.createDiagnosticCollection('ma3');
   context.subscriptions.push(diagnostics);
+  // a manifest edited, added or removed changes which console its Lua files target
+  const xmlWatcher = vscode.workspace.createFileSystemWatcher('**/*.xml');
+  context.subscriptions.push(xmlWatcher, xmlWatcher.onDidCreate(() => manifestCache.clear()), xmlWatcher.onDidChange(() => manifestCache.clear()), xmlWatcher.onDidDelete(() => manifestCache.clear()));
   let vars = null; // variable features (lib/varFeatures.js), registered once the console helpers below exist
 
   // ---- live show contents (cached; refreshed when stale, never when the bridge is down)
@@ -239,9 +243,9 @@ function activate(context) {
           const en = enumContext(before);
           if (en && targetOf(doc) === 'ma3') {
             if (en.kind === 'enums') {
-              return (await liveFetch('enums', enumNamesLua(), parseNames)).map((n) => new vscode.CompletionItem(n, vscode.CompletionItemKind.Enum));
+              return enums.enumNames(await liveFetch('enums', enumNamesLua(), parseNames)).map((n) => new vscode.CompletionItem(n, vscode.CompletionItemKind.Enum));
             }
-            return (await liveFetch(`enum:${en.name}`, enumMembersLua(en.name), parseMembers)).map((m) => {
+            return enums.enumMembers(en.name, await liveFetch(`enum:${en.name}`, enumMembersLua(en.name), parseMembers)).map((m) => {
               const item = new vscode.CompletionItem(m.name, vscode.CompletionItemKind.EnumMember);
               item.detail = `Enums.${en.name}.${m.name} = ${m.value}`;
               return item;
@@ -380,7 +384,7 @@ function activate(context) {
   // ---- hover
   context.subscriptions.push(
     vscode.languages.registerHoverProvider(LUA, {
-      provideHover(doc, pos) {
+      async provideHover(doc, pos) {
         const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_]\w*/);
         if (!range) return null;
         const cmdHover = commandHover(doc.lineAt(pos).text, pos.character, targetOf(doc));
@@ -392,6 +396,10 @@ function activate(context) {
           const md = new vscode.MarkdownString([`**${pinfo.name}** \`${pinfo.type}\`${pinfo.readOnly ? ', read-only' : ''}`, `Used by ${pinfo.classes} object class${pinfo.classes === 1 ? '' : 'es'}.`, vals.length ? `Values: ${vals.join(', ')}` : ''].filter(Boolean).join('\n\n'));
           return new vscode.Hover(md, new vscode.Range(pos.line, pa.start, pos.line, pa.end));
         }
+        const ea = targetOf(doc) === 'ma3' ? enums.enumAt(doc.lineAt(pos).text, pos.character) : null;
+        // the live console wins, as in completion; the bundle answers when it has nothing
+        const enumMd = ea && enums.enumHoverMarkdown(ea.name, ea.member, await liveFetch(`enum:${ea.name}`, enumMembersLua(ea.name), parseMembers));
+        if (enumMd) return new vscode.Hover(new vscode.MarkdownString(enumMd), new vscode.Range(pos.line, ea.start, pos.line, ea.end));
         const gmaPath = pathAt(doc.lineAt(pos).text, range.end.character);
         const gmaFn = gmaPath && BY_PATH.get(gmaPath);
         if (gmaFn) {
@@ -872,7 +880,7 @@ function activate(context) {
       const row = (p) => `${p.name.padEnd(28)} ${String(p.type).padEnd(16)} ${p.readOnly ? 'ro' : 'rw'}  ${p.value !== undefined ? p.value : ''}${p.enumName ? `  [${p.enumName}]` : ''}`;
       if (el.target === 'ma2') {
         out.appendLine(`${el.addr || el.path.join('.')}  (grandMA2, from the bundled schema; no live values)`);
-        props.ma2Props(el.cls || '').forEach((p) => out.appendLine(`${p.name.padEnd(28)} ${p.type}${p.values && p.values.length ? `  [${p.values.join(', ')}]` : ''}`));
+        props.ma2Props(el.cls || '').forEach((p) => out.appendLine(`${p.name.padEnd(28)} ${p.type}${props.ma2ValuesText(p) ? `  [${props.ma2ValuesText(p)}]` : ''}`));
       } else {
         let live = null;
         try {
@@ -1165,7 +1173,7 @@ function activate(context) {
       const luarc = path.join(root, '.luarc.json');
       const merged = mergeLuarc(fs.existsSync(luarc) ? fs.readFileSync(luarc, 'utf8') : '', {
         libraryDir: './.vscode/grandma-stubs',
-        runtimeVersion: cfg().get('target') === 'ma2' ? 'Lua 5.3' : 'Lua 5.4',
+        runtimeVersion: (['ma2', 'ma3'].includes(cfg().get('target')) ? cfg().get('target') : activeTarget()) === 'ma2' ? 'Lua 5.3' : 'Lua 5.4',
       });
       if (merged.error) {
         vscode.window.showWarningMessage(`Definitions written to .vscode/grandma-stubs. ${merged.error}`);
@@ -1200,7 +1208,7 @@ function activate(context) {
   async function runLuaTestFile(fsPath) {
     const open = vscode.workspace.textDocuments.find((d) => d.fileName === fsPath);
     const text = open ? open.getText() : fs.readFileSync(fsPath, 'utf8');
-    const target = detectTarget(text, cfg().get('target'));
+    const target = targetOfFile(text, fsPath);
     const dir = bridgeDirFor(target);
     if (!bridge.status(dir).running) {
       return { target, results: [], output: [], error: `The LuaBridge isn't running on the ${target === 'ma2' ? 'grandMA2' : 'grandMA3'} console.` };
