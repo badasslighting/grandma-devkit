@@ -280,7 +280,7 @@ test('bracket conditions become Lua ifs', () => {
   assert.deepStrictEqual(V.bracketLineToLua('[$s=="yes"] Label Macro 1 "a"'), { lua: 'if GetVar(GlobalVars(), "s") == "yes" then Cmd("Label Macro 1 \\"a\\"") end' });
   assert.strictEqual(V.bracketLineToLua('[$a==1 && $b==2] Go+'), null);
   assert.strictEqual(V.bracketLineToLua('Go+'), null);
-  assert.strictEqual(V.conditionToLua('$a!=1'), 'GetVar(GlobalVars(), "a") == 1'); // != is read as == on grandMA2
+  assert.strictEqual(V.conditionToLua('$a!=1'), null); // grandMA2 reads != as ==, so no silent translation either way
 });
 
 // ---- live values ------------------------------------------------------------------------------------------
