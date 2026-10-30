@@ -26,6 +26,7 @@ const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
 const props = require('./lib/props');
+const enums = require('./lib/enums');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
 const { enumNamesLua, enumMembersLua, attributeNamesLua, parseNames, parseMembers, enumContext, attributeContext } = require('./lib/liveNames');
 const bridge = require('./lib/bridge');
@@ -238,9 +239,9 @@ function activate(context) {
           const en = enumContext(before);
           if (en && targetOf(doc) === 'ma3') {
             if (en.kind === 'enums') {
-              return (await liveFetch('enums', enumNamesLua(), parseNames)).map((n) => new vscode.CompletionItem(n, vscode.CompletionItemKind.Enum));
+              return enums.enumNames(await liveFetch('enums', enumNamesLua(), parseNames)).map((n) => new vscode.CompletionItem(n, vscode.CompletionItemKind.Enum));
             }
-            return (await liveFetch(`enum:${en.name}`, enumMembersLua(en.name), parseMembers)).map((m) => {
+            return enums.enumMembers(en.name, await liveFetch(`enum:${en.name}`, enumMembersLua(en.name), parseMembers)).map((m) => {
               const item = new vscode.CompletionItem(m.name, vscode.CompletionItemKind.EnumMember);
               item.detail = `Enums.${en.name}.${m.name} = ${m.value}`;
               return item;
@@ -391,6 +392,9 @@ function activate(context) {
           const md = new vscode.MarkdownString([`**${pinfo.name}** \`${pinfo.type}\`${pinfo.readOnly ? ', read-only' : ''}`, `Used by ${pinfo.classes} object class${pinfo.classes === 1 ? '' : 'es'}.`, vals.length ? `Values: ${vals.join(', ')}` : ''].filter(Boolean).join('\n\n'));
           return new vscode.Hover(md, new vscode.Range(pos.line, pa.start, pos.line, pa.end));
         }
+        const ea = targetOf(doc) === 'ma3' ? enums.enumAt(doc.lineAt(pos).text, pos.character) : null;
+        const enumMd = ea && enums.enumHoverMarkdown(ea.name, ea.member);
+        if (enumMd) return new vscode.Hover(new vscode.MarkdownString(enumMd), new vscode.Range(pos.line, ea.start, pos.line, ea.end));
         const gmaPath = pathAt(doc.lineAt(pos).text, range.end.character);
         const gmaFn = gmaPath && BY_PATH.get(gmaPath);
         if (gmaFn) {
