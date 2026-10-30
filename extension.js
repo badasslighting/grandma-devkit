@@ -37,16 +37,16 @@ const pluginsFolder = () => cfg().get('pluginsPath') || defaultPluginsPath();
 const ma2PluginsFolder = () => cfg().get('ma2.pluginsPath') || defaultMa2PluginsPath();
 const bridgeDirFor = (target) => (target === 'ma2' ? cfg().get('ma2.bridgeDir') || defaultBridgeDirMa2() : cfg().get('bridge.dir') || defaultBridgeDir());
 
-// Which console a Lua document targets: the ma3.target setting, `gma.` calls in the code, or the
-// manifest next to it (looked up at most every few seconds).
+// Which console a Lua document targets (lib/target.js has the order of the signals): the ma3.target
+// setting, the manifest next to it (looked up at most every few seconds), the folder it is in, then
+// the API names in the code.
 const manifestHint = new Map();
 function targetOf(doc) {
   const text = doc.getText();
   const setting = cfg().get('target');
-  const quick = detectTarget(text, setting);
-  if (setting !== 'auto' || quick === 'ma2' || doc.isUntitled) return quick;
+  if (setting !== 'auto' || doc.isUntitled) return detectTarget(text, setting);
   const dir = path.dirname(doc.fileName);
-  const hit = manifestHint.get(dir);
+  let hit = manifestHint.get(dir);
   if (!hit || Date.now() - hit.at > 3000) {
     let xml = '';
     try {
@@ -55,16 +55,15 @@ function targetOf(doc) {
     } catch (_) {
       /* no manifest */
     }
-    manifestHint.set(dir, { at: Date.now(), xml });
-    return detectTarget(text, setting, xml);
+    hit = { at: Date.now(), xml };
+    manifestHint.set(dir, hit);
   }
-  return detectTarget(text, setting, hit.xml);
+  return detectTarget(text, setting, hit.xml, doc.fileName);
 }
-// The same decision for a file that is not open: the code, then the manifest next to it.
+// The same decision for a file that is not open.
 function targetOfFile(text, fileName) {
   const setting = cfg().get('target');
-  const quick = detectTarget(text, setting);
-  if (setting !== 'auto' || quick === 'ma2') return quick;
+  if (setting !== 'auto') return detectTarget(text, setting);
   let xml = '';
   try {
     const m = findManifest(fileName);
@@ -72,7 +71,7 @@ function targetOfFile(text, fileName) {
   } catch (_) {
     /* no manifest */
   }
-  return detectTarget(text, setting, xml);
+  return detectTarget(text, setting, xml, fileName);
 }
 const manifestIsMa2 = (manifest) => {
   try {
@@ -1200,7 +1199,7 @@ function activate(context) {
   async function runLuaTestFile(fsPath) {
     const open = vscode.workspace.textDocuments.find((d) => d.fileName === fsPath);
     const text = open ? open.getText() : fs.readFileSync(fsPath, 'utf8');
-    const target = detectTarget(text, cfg().get('target'));
+    const target = targetOfFile(text, fsPath);
     const dir = bridgeDirFor(target);
     if (!bridge.status(dir).running) {
       return { target, results: [], output: [], error: `The LuaBridge isn't running on the ${target === 'ma2' ? 'grandMA2' : 'grandMA3'} console.` };
