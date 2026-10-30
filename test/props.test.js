@@ -83,7 +83,11 @@ test('grandMA2 properties: On/Off and Yes/No list their values, observed samples
   const sample = p.ma2Props('LayoutElementDefaults').find((p) => p.name === 'FontSize');
   assert.strictEqual(p.ma2ValuesText(sample), 'Default, Small, Big'); // confirmed on a console: the three font sizes
   const symbol = p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'Symbol');
-  assert.strictEqual(p.ma2ValuesText(symbol), 'e.g. Small, Big'); // only two of three values known
+  assert.strictEqual(p.ma2ValuesText(symbol), 'e.g. Small, Big'); // Fit is refused on onPC 3.9.61.1
+  const byName = (c, n) => p.ma2Props(c).find((x) => x.name === n);
+  assert.strictEqual(p.ma2ValuesText(byName('LayoutElementDefaults', 'Visualization')), 'Pool icon, Filled, None, Spot');
+  assert.strictEqual(p.ma2ValuesText(byName('LayoutElementDefaults', 'ImageSize')), 'Small, Big, Fit');
+  assert.strictEqual(p.ma2ValuesText(byName('Display', 'Readout')), 'e.g. Natural, Percent, Decimal, Hex');
   assert.strictEqual(p.ma2ValuesText(p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'BackgroundColor')), ''); // an RGB colour, not a list
   assert.strictEqual(p.ma2ValuesText(rows.find((p) => p.type === 'text')), '');
   assert.match(p.propsMarkdown('TimeConfig', rows), /\| RegardDaylightSaving \| On\/Off \| On, Off \|/);
