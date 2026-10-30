@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { detectTarget, fromFolder, fromApiNames } = require('../lib/target');
+const { detectTarget, detectTargetForFile, manifestXmlFor, fromFolder, fromApiNames } = require('../lib/target');
 
 const win = (p) => p.split('/').join(String.fromCharCode(92));
 const MA2_XML = '<?xml version="1.0"?>\n<MA xmlns="http://schemas.malighting.de/grandma2/xml/MA" major_vers="3">\n<Plugin name="P" luafile="P.lua" />\n</MA>';
@@ -82,4 +82,27 @@ test('target: a bracket Cmd in an MA2 file without gma calls follows the manifes
   const code = 'return function() Cmd("[$x == 1] Go+") end';
   assert.strictEqual(detectTarget(code, 'auto', MA2_XML), 'ma2');
   assert.strictEqual(detectTarget(code, 'auto', '', win('C:/plugins/grandMA2/p.lua')), 'ma2');
+});
+
+test('target: aliasing a gma. function (the grandMA2 idiom) does not make the alias a grandMA3 global', () => {
+  const alias = 'local Echo = gma.echo; local Printf = gma.echo; Echo(1) Printf(2)';
+  assert.strictEqual(fromApiNames(alias), 'ma2');
+  assert.strictEqual(fromApiNames('Echo = gma.echo\nPrintf = gma.feedback\nEcho(1) Printf(2)'), 'ma2');
+  assert.strictEqual(fromApiNames('local Printf = gma . gui . msg\nPrintf("x")'), 'ma2');
+  // the alias only counts for the names it defines; a == comparison and a field assignment define nothing
+  assert.strictEqual(fromApiNames('local Echo = gma.echo\nPrintf(1) Cmd("x")'), 'ma3');
+  assert.strictEqual(fromApiNames('if Printf == gma.echo then end Printf(1) Cmd("x")'), 'ma3');
+  assert.strictEqual(detectTarget(alias, 'auto'), 'ma2');
+});
+
+test('target: the manifest that lists the file beats gma. calls, as the extension wires it', () => {
+  const entries = [{ xml: MA2_XML, names: ['other.lua'] }, { xml: MA3_XML, names: ['p.lua'] }];
+  const gma = 'gma.cmd("x") gma.echo("y")';
+  assert.strictEqual(manifestXmlFor(entries, win('C:/plugins/P.lua')), MA3_XML, 'matched by file name, case-insensitive');
+  assert.strictEqual(manifestXmlFor(entries, '/plugins/nope.lua'), '');
+  assert.strictEqual(manifestXmlFor([], '/plugins/p.lua'), '');
+  assert.strictEqual(detectTargetForFile(gma, 'auto', '/plugins/p.lua', entries), 'ma3', 'manifest says ma3 despite gma.');
+  assert.strictEqual(detectTargetForFile('Printf("x")', 'auto', '/plugins/other.lua', entries), 'ma2', 'manifest says ma2 despite Printf');
+  assert.strictEqual(detectTargetForFile(gma, 'auto', '/plugins/nope.lua', entries), 'ma2', 'no manifest lists it: API names');
+  assert.strictEqual(detectTargetForFile(gma, 'ma3', '/plugins/other.lua', entries), 'ma3', 'the setting still wins');
 });
