@@ -72,3 +72,16 @@ test('the bundled data has no station-specific strings', () => {
   const text = JSON.stringify(require('../data/props.json'));
   assert.doesNotMatch(text, /\b\d{1,3}(\.\d{1,3}){3}\b|([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}/);
 });
+
+test('grandMA2 properties: On/Off and Yes/No list their values, observed samples are marked e.g.', () => {
+  const rows = p.ma2Props('TimeConfig');
+  const onOff = rows.find((p) => p.type === 'On/Off');
+  assert.deepStrictEqual(onOff.values, ['On', 'Off']);
+  assert.strictEqual(p.ma2ValuesText(onOff), 'On, Off');
+  const yesNo = p.ma2Props('Stations').find((p) => p.type === 'Yes/No');
+  if (yesNo) assert.strictEqual(p.ma2ValuesText(yesNo), 'Yes, No');
+  const sample = p.ma2Props('LayoutElementDefaults').find((p) => p.name === 'FontSize');
+  assert.strictEqual(p.ma2ValuesText(sample), 'e.g. Default, Small');
+  assert.strictEqual(p.ma2ValuesText(rows.find((p) => p.type === 'text')), '');
+  assert.match(p.propsMarkdown('TimeConfig', rows), /\| RegardDaylightSaving \| On\/Off \| On, Off \|/);
+});

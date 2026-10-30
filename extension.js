@@ -880,7 +880,7 @@ function activate(context) {
       const row = (p) => `${p.name.padEnd(28)} ${String(p.type).padEnd(16)} ${p.readOnly ? 'ro' : 'rw'}  ${p.value !== undefined ? p.value : ''}${p.enumName ? `  [${p.enumName}]` : ''}`;
       if (el.target === 'ma2') {
         out.appendLine(`${el.addr || el.path.join('.')}  (grandMA2, from the bundled schema; no live values)`);
-        props.ma2Props(el.cls || '').forEach((p) => out.appendLine(`${p.name.padEnd(28)} ${p.type}${p.values && p.values.length ? `  [${p.values.join(', ')}]` : ''}`));
+        props.ma2Props(el.cls || '').forEach((p) => out.appendLine(`${p.name.padEnd(28)} ${p.type}${props.ma2ValuesText(p) ? `  [${props.ma2ValuesText(p)}]` : ''}`));
       } else {
         let live = null;
         try {

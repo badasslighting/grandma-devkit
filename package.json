@@ -2,7 +2,7 @@
   "name": "grandma-devkit",
   "displayName": "Devkit for Grand MA2+MA3",
   "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",

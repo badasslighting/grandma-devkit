@@ -131,7 +131,7 @@ Enable Telnet (the remote command line) on the console and set `ma3.telnet.user`
 - **Live show completion**: inside `gma.cmd("...")` strings, group, sequence, macro, layout, plugin and effect numbers complete with their labels from the show (`ma3.liveCompletion`; needs LuaBridge_MA2; refreshed at most once a minute). Presets are not covered.
 - **Object browser**: the **grandMA3 Objects** view in the Explorer has a switch button for grandMA2. It lists `Root 1` to `Root 30` and expands children lazily through `gma.show.getobj` (500 slots per level; empty slots are skipped). Right-click copies `gma.show.getobj.handle("Root 3.2")`, or the address `Root 3.2`; an object with no pool number has no address.
 
-Not covered for grandMA2 yet: enum completion and object path completion (both grandMA3 only).
+Not covered for grandMA2 yet: object path completion (grandMA3 only). grandMA2 has no `Enums` table; object tooltips and **Show Properties** list the values of On/Off and Yes/No properties, and mark value lists seen on the console as "e.g.".
 
 Lua language features (syntax, linting) come from the bundled `sumneko.lua` pack.
 
