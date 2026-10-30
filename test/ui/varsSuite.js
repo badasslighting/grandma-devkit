@@ -148,7 +148,7 @@ module.exports = function registerVarTests({ test, testMa2, testMa3, ws, openLua
     assert.strictEqual(conv.to, 'ma3');
     assert.match(conv.text, /SetVar\(GlobalVars\(\), "x", 1\)/);
     assert.match(conv.text, /GetVar\(UserVars\(\), "y"\)/);
-    assert.match(conv.text, /if GetVar\(GlobalVars\(\), "x"\) == 1 then Cmd\("Go\+ Executor 1"\) end/);
+    assert.match(conv.text, /local v = GetVar\(GlobalVars\(\), "x"\);.* if n == 1 then Cmd\("Go\+ Executor 1"\) end end/);
     assert.ok(conv.text.includes('Cmd("SetGlobalVariable \\"z\\" \\"abc\\"")'), `quotes escaped inside the Lua string: ${conv.text}`);
     const mac = await openFile('c2.gma2macro', ['SetVar $a = 7', 'SetUserVar $b = text', '[$a==7] Go+', ''].join('\n'));
     const mc = await cmd('ma3.vars.convert', { uri: mac.uri.toString(), open: false });
@@ -165,7 +165,7 @@ module.exports = function registerVarTests({ test, testMa2, testMa3, ws, openLua
     const act = acts.find((a) => /Rewrite as a Lua if/.test(a.title));
     assert.ok(act, `a rewrite action is offered: ${acts.map((a) => a.title)}`);
     await vscode.workspace.applyEdit(act.edit);
-    assert.strictEqual(doc.getText().trim(), 'if GetVar(GlobalVars(), "v") == 5 then Cmd("Off Page 3") end');
+    assert.match(doc.getText().trim(), /^do local function N\(s\).*local v = GetVar\(GlobalVars\(\), "v"\);.* if n == 5 then Cmd\("Off Page 3"\) end end$/);
     const m = await openFile('q2.gma2macro', '[$v!=5] Go+\n');
     await waitCodes(m, ['bracket-operator']);
     const acts2 = await cmd('vscode.executeCodeActionProvider', m.uri, new vscode.Range(0, 3, 0, 4), 'quickfix');
