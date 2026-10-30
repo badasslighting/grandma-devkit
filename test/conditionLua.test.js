@@ -94,3 +94,12 @@ test('conditions: the Lua number test is the console\'s (no hex, no exponent): t
   assert.deepStrictEqual(luaSays('$x == 16', [{ x: '0x10' }, { x: '16' }]), ['skip', 'run']);
   assert.deepStrictEqual(luaSays('$x == $y', [{ x: '0x10', y: '16' }, { x: '5', y: '5.0' }]), ['skip', 'run']);
 });
+
+test('conditions: a text variable in an ordering comparison compares as text, as on the console', (t) => {
+  if (!have('lua')) return t.skip('no lua on the PATH');
+  const cases = ['0x10', '1e3', 'abc', '5', '6', '10', '4', '5.0', ' 5', '', 'Zed', undefined].map((x) => ({ x }));
+  const conds = [...ORDERINGS.map((o) => `$x ${o} 5`), ...ORDERINGS.map((o) => `5 ${o} $x`), ...ORDERINGS.map((o) => `$x ${o} 5.5`), '$x == 5', '$x == abc'];
+  compareToConsole(conds, cases);
+  // abc > 5 runs (text order), 6 > 5 runs (number order), 10 > 5 runs as numbers though "10" < "5" as text, unset skips
+  assert.deepStrictEqual(luaSays('$x > 5', ['abc', '6', '10', '4'].map((x) => ({ x })).concat([{}])), ['run', 'run', 'run', 'skip', 'skip']);
+});

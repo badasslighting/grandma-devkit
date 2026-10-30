@@ -2,8 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const V = require('../lib/variables');
-const NUM = 'local function N(s) s = tostring(s); if s:match("^%s*[+-]?%d+%.?%d*%s*$") or s:match("^%s*[+-]?%.%d+%s*$") then return tonumber(s) end end';
-const PRE = (scope, name) => `${NUM}; local v = N(GetVar(${scope}Vars(), "${name}"))`;
+const PRE = (scope, name) => `local function N(s) s = tostring(s); if s:match("^%s*[+-]?%d+%.?%d*%s*$") or s:match("^%s*[+-]?%.%d+%s*$") then return tonumber(s) end end; local v = GetVar(${scope}Vars(), "${name}"); local n = v ~= nil and N(v)`;
 const { commandStrings, checkCommand } = require('../lib/conditions');
 const { decode, macroKind, commandSegments, toRaw } = require('../lib/macroFiles');
 const { scanFile, buildKnown, findAll, positionOf } = require('../lib/varIndex');
@@ -277,8 +276,8 @@ test('convertCommand and convertLua', () => {
 });
 
 test('bracket conditions become Lua ifs', () => {
-  assert.deepStrictEqual(V.bracketLineToLua('[$x==5] Off Page 3'), { lua: 'do ' + PRE('Global', 'x') + '; if v ~= nil and v == 5 then Cmd("Off Page 3") end end' });
-  assert.deepStrictEqual(V.bracketLineToLua('[$x>=5] Go+', (n) => (n === 'x' ? 'user' : 'global')), { lua: 'do ' + PRE('User', 'x') + '; if v ~= nil and v >= 5 then Cmd("Go+") end end' });
+  assert.deepStrictEqual(V.bracketLineToLua('[$x==5] Off Page 3'), { lua: 'do ' + PRE('Global', 'x') + '; if n == 5 then Cmd("Off Page 3") end end' });
+  assert.deepStrictEqual(V.bracketLineToLua('[$x>=5] Go+', (n) => (n === 'x' ? 'user' : 'global')), { lua: 'do ' + PRE('User', 'x') + '; if v ~= nil and (n and n >= 5 or not n and tostring(v) >= "5") then Cmd("Go+") end end' });
   assert.deepStrictEqual(V.bracketLineToLua('[$s=="yes"] Label Macro 1 "a"'), { lua: 'do local v = GetVar(GlobalVars(), "s"); if v ~= nil and tostring(v) == "yes" then Cmd("Label Macro 1 \\"a\\"") end end' });
   assert.strictEqual(V.bracketLineToLua('[$a==1 && $b==2] Go+'), null);
   assert.strictEqual(V.bracketLineToLua('Go+'), null);
