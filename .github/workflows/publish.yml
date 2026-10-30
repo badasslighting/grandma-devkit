@@ -1,4 +1,4 @@
-name: Publish to Open VSX
+name: Publish to Open VSX and VS Code Marketplace
 
 on:
   push:
@@ -18,7 +18,12 @@ jobs:
           test "v$v" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match package.json version $v"; exit 1; }
       - run: npm test
       - run: npx --yes @vscode/vsce package
-      - name: Publish
+      - name: Publish to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: npx --yes ovsx publish ./*.vsix -p "$OVSX_PAT"
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        if: env.VSCE_PAT != ''
+        run: npx --yes @vscode/vsce publish --packagePath ./*.vsix -p "$VSCE_PAT"
