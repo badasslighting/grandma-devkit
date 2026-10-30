@@ -275,9 +275,9 @@ test('convertCommand and convertLua', () => {
 });
 
 test('bracket conditions become Lua ifs', () => {
-  assert.deepStrictEqual(V.bracketLineToLua('[$x==5] Off Page 3'), { lua: 'if GetVar(GlobalVars(), "x") == 5 then Cmd("Off Page 3") end' });
-  assert.deepStrictEqual(V.bracketLineToLua('[$x>=5] Go+', (n) => (n === 'x' ? 'user' : 'global')), { lua: 'if GetVar(UserVars(), "x") >= 5 then Cmd("Go+") end' });
-  assert.deepStrictEqual(V.bracketLineToLua('[$s=="yes"] Label Macro 1 "a"'), { lua: 'if GetVar(GlobalVars(), "s") == "yes" then Cmd("Label Macro 1 \\"a\\"") end' });
+  assert.deepStrictEqual(V.bracketLineToLua('[$x==5] Off Page 3'), { lua: 'do local v = tonumber((GetVar(GlobalVars(), "x"))); if v ~= nil and v == 5 then Cmd("Off Page 3") end end' });
+  assert.deepStrictEqual(V.bracketLineToLua('[$x>=5] Go+', (n) => (n === 'x' ? 'user' : 'global')), { lua: 'do local v = tonumber((GetVar(UserVars(), "x"))); if v ~= nil and v >= 5 then Cmd("Go+") end end' });
+  assert.deepStrictEqual(V.bracketLineToLua('[$s=="yes"] Label Macro 1 "a"'), { lua: 'do local v = GetVar(GlobalVars(), "s"); if v ~= nil and tostring(v) == "yes" then Cmd("Label Macro 1 \\"a\\"") end end' });
   assert.strictEqual(V.bracketLineToLua('[$a==1 && $b==2] Go+'), null);
   assert.strictEqual(V.bracketLineToLua('Go+'), null);
   assert.strictEqual(V.conditionToLua('$a!=1'), null); // grandMA2 reads != as ==, so no silent translation either way
