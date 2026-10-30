@@ -55,3 +55,16 @@ test('completion context feeds the static lookup end to end', () => {
   assert.deepStrictEqual(e.enumMembers(en.name, []).map((m) => m.name), ['Countdown', 'Stopwatch']);
   assert.ok(e.enumNames([]).includes('TimerMode'));
 });
+
+test('enumHoverMarkdown: live members win over the bundle, an empty live answer falls back', () => {
+  const live = [{ name: 'Live', value: '9' }];
+  const md = e.enumHoverMarkdown('TimerMode', 'Live', live);
+  assert.match(md, /Enums\.TimerMode\.Live\*\* = 9/);
+  assert.match(md, /live console/);
+  assert.strictEqual(e.enumHoverMarkdown('TimerMode', 'Countdown', live), null, 'a bundled member the console does not have is not described');
+  assert.match(e.enumHoverMarkdown('TimerMode', '', live), /Live \(9\)/);
+  assert.doesNotMatch(e.enumHoverMarkdown('TimerMode', '', live), /Stopwatch/);
+  assert.match(e.enumHoverMarkdown('TimerMode', 'Stopwatch', []), /Stopwatch\*\* = 1/, 'empty live: the bundle');
+  assert.match(e.enumHoverMarkdown('TimerMode', 'Stopwatch', []), /bundled/);
+  assert.match(e.enumHoverMarkdown('Unknown', '', live), /Live \(9\)/, 'the console may know enums the bundle does not');
+});

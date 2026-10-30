@@ -19,7 +19,7 @@ const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = r
 const { ma2TreeLua, parseMa2Tree, ma2Address, ma2ShowLua } = require('./lib/ma2Objects');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
-const { detectTarget } = require('./lib/target');
+const { detectTarget, detectTargetForFile } = require('./lib/target');
 const varFeatures = require('./lib/varFeatures');
 const { macroKind } = require('./lib/macroFiles');
 const { bumpVersion, zip } = require('./lib/release');
@@ -39,40 +39,41 @@ const ma2PluginsFolder = () => cfg().get('ma2.pluginsPath') || defaultMa2Plugins
 const bridgeDirFor = (target) => (target === 'ma2' ? cfg().get('ma2.bridgeDir') || defaultBridgeDirMa2() : cfg().get('bridge.dir') || defaultBridgeDir());
 
 // Which console a Lua document targets (lib/target.js has the order of the signals): the ma3.target
-// setting, the manifest next to it (looked up at most every few seconds), the folder it is in, then
-// the API names in the code.
-const manifestHint = new Map();
-function targetOf(doc) {
-  const text = doc.getText();
-  const setting = cfg().get('target');
-  if (setting !== 'auto' || doc.isUntitled) return detectTarget(text, setting);
-  const dir = path.dirname(doc.fileName);
-  let hit = manifestHint.get(dir);
-  if (!hit || Date.now() - hit.at > 3000) {
-    let xml = '';
-    try {
-      const m = findManifest(doc.fileName);
-      xml = m ? fs.readFileSync(m, 'utf8') : '';
-    } catch (_) {
-      /* no manifest */
+// setting, the manifest that lists the file, the folder it is in, then the API names in the code.
+// The manifests of a folder are read once and kept (a workspace scan asks for every Lua file in it): the cache is
+// emptied when any .xml file changes and expires after half a minute.
+const MANIFEST_TTL_MS = 30000;
+const manifestCache = new Map();
+function manifestEntries(dir) {
+  const hit = manifestCache.get(dir);
+  if (hit && Date.now() - hit.at < MANIFEST_TTL_MS) return hit.list;
+  const list = [];
+  try {
+    for (const entry of fs.readdirSync(dir)) {
+      if (!entry.toLowerCase().endsWith('.xml')) continue;
+      try {
+        const manifest = path.join(dir, entry);
+        list.push({ xml: fs.readFileSync(manifest, 'utf8'), names: filesForManifest(manifest).map((f) => path.basename(f).toLowerCase()) });
+      } catch (_) {
+        /* not a plugin manifest */
+      }
     }
-    hit = { at: Date.now(), xml };
-    manifestHint.set(dir, hit);
+  } catch (_) {
+    /* no such folder */
   }
-  return detectTarget(text, setting, hit.xml, doc.fileName);
+  manifestCache.set(dir, { at: Date.now(), list });
+  return list;
+}
+function targetOf(doc) {
+  const setting = cfg().get('target');
+  if (setting !== 'auto' || doc.isUntitled) return detectTarget(doc.getText(), setting);
+  return detectTargetForFile(doc.getText(), setting, doc.fileName, manifestEntries(path.dirname(doc.fileName)));
 }
 // The same decision for a file that is not open.
 function targetOfFile(text, fileName) {
   const setting = cfg().get('target');
   if (setting !== 'auto') return detectTarget(text, setting);
-  let xml = '';
-  try {
-    const m = findManifest(fileName);
-    xml = m ? fs.readFileSync(m, 'utf8') : '';
-  } catch (_) {
-    /* no manifest */
-  }
-  return detectTarget(text, setting, xml, fileName);
+  return detectTargetForFile(text, setting, fileName, manifestEntries(path.dirname(fileName)));
 }
 const manifestIsMa2 = (manifest) => {
   try {
@@ -92,6 +93,9 @@ function activate(context) {
   let index = loadApi(context);
   const diagnostics = vscode.languages.createDiagnosticCollection('ma3');
   context.subscriptions.push(diagnostics);
+  // a manifest edited, added or removed changes which console its Lua files target
+  const xmlWatcher = vscode.workspace.createFileSystemWatcher('**/*.xml');
+  context.subscriptions.push(xmlWatcher, xmlWatcher.onDidCreate(() => manifestCache.clear()), xmlWatcher.onDidChange(() => manifestCache.clear()), xmlWatcher.onDidDelete(() => manifestCache.clear()));
   let vars = null; // variable features (lib/varFeatures.js), registered once the console helpers below exist
 
   // ---- live show contents (cached; refreshed when stale, never when the bridge is down)
@@ -380,7 +384,7 @@ function activate(context) {
   // ---- hover
   context.subscriptions.push(
     vscode.languages.registerHoverProvider(LUA, {
-      provideHover(doc, pos) {
+      async provideHover(doc, pos) {
         const range = doc.getWordRangeAtPosition(pos, /[A-Za-z_]\w*/);
         if (!range) return null;
         const cmdHover = commandHover(doc.lineAt(pos).text, pos.character, targetOf(doc));
@@ -393,7 +397,8 @@ function activate(context) {
           return new vscode.Hover(md, new vscode.Range(pos.line, pa.start, pos.line, pa.end));
         }
         const ea = targetOf(doc) === 'ma3' ? enums.enumAt(doc.lineAt(pos).text, pos.character) : null;
-        const enumMd = ea && enums.enumHoverMarkdown(ea.name, ea.member);
+        // the live console wins, as in completion; the bundle answers when it has nothing
+        const enumMd = ea && enums.enumHoverMarkdown(ea.name, ea.member, await liveFetch(`enum:${ea.name}`, enumMembersLua(ea.name), parseMembers));
         if (enumMd) return new vscode.Hover(new vscode.MarkdownString(enumMd), new vscode.Range(pos.line, ea.start, pos.line, ea.end));
         const gmaPath = pathAt(doc.lineAt(pos).text, range.end.character);
         const gmaFn = gmaPath && BY_PATH.get(gmaPath);
@@ -1168,7 +1173,7 @@ function activate(context) {
       const luarc = path.join(root, '.luarc.json');
       const merged = mergeLuarc(fs.existsSync(luarc) ? fs.readFileSync(luarc, 'utf8') : '', {
         libraryDir: './.vscode/grandma-stubs',
-        runtimeVersion: cfg().get('target') === 'ma2' ? 'Lua 5.3' : 'Lua 5.4',
+        runtimeVersion: (['ma2', 'ma3'].includes(cfg().get('target')) ? cfg().get('target') : activeTarget()) === 'ma2' ? 'Lua 5.3' : 'Lua 5.4',
       });
       if (merged.error) {
         vscode.window.showWarningMessage(`Definitions written to .vscode/grandma-stubs. ${merged.error}`);
