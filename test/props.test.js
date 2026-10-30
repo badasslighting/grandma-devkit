@@ -89,6 +89,9 @@ test('grandMA2 properties: On/Off and Yes/No list their values, observed samples
   assert.strictEqual(p.ma2ValuesText(byName('LayoutElementDefaults', 'ImageSize')), 'Small, Big, Fit');
   assert.strictEqual(p.ma2ValuesText(byName('Display', 'Readout')), 'e.g. Natural, Percent, Decimal, Hex');
   assert.strictEqual(p.ma2ValuesText(p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'BackgroundColor')), ''); // an RGB colour, not a list
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_DMX_UNIVERSE', 'DMX In Merge')), 'HTP, Off, LoTP'); // read off the console dropdown, then written and read back
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_PSN_SYSTEM', 'X map')), 'X, Y, Z'); // an axis choice, not a coordinate; numbers 0-2 index the same list
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_MACRO_LINE_OBJECT', 'Wait')), 'e.g. Follow, Go'); // Follow is also a console keyword: values are written quoted
   assert.strictEqual(p.ma2ValuesText(rows.find((p) => p.type === 'text')), '');
   assert.match(p.propsMarkdown('TimeConfig', rows), /\| RegardDaylightSaving \| On\/Off \| On, Off \|/);
 });
