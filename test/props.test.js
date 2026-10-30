@@ -81,7 +81,10 @@ test('grandMA2 properties: On/Off and Yes/No list their values, observed samples
   const yesNo = p.ma2Props('Stations').find((p) => p.type === 'Yes/No');
   if (yesNo) assert.strictEqual(p.ma2ValuesText(yesNo), 'Yes, No');
   const sample = p.ma2Props('LayoutElementDefaults').find((p) => p.name === 'FontSize');
-  assert.strictEqual(p.ma2ValuesText(sample), 'e.g. Default, Small');
+  assert.strictEqual(p.ma2ValuesText(sample), 'Default, Small, Big'); // confirmed on a console: the three font sizes
+  const symbol = p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'Symbol');
+  assert.strictEqual(p.ma2ValuesText(symbol), 'e.g. Small, Big'); // only two of three values known
+  assert.strictEqual(p.ma2ValuesText(p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'BackgroundColor')), ''); // an RGB colour, not a list
   assert.strictEqual(p.ma2ValuesText(rows.find((p) => p.type === 'text')), '');
   assert.match(p.propsMarkdown('TimeConfig', rows), /\| RegardDaylightSaving \| On\/Off \| On, Off \|/);
 });
