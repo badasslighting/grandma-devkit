@@ -6,7 +6,7 @@
 - A Lua file's console (grandMA2 or grandMA3) is now detected from the `ma3.target` setting, the plugin manifest, the folder name and the API names it calls, not only from `gma.` calls.
 - `Enums.*` completion and hover for grandMA3 work without a console, from the bundled enum tables. Live console data is still preferred when the bridge runs.
 - grandMA2 object tooltips and Show Properties list the values of On/Off and Yes/No properties; value lists seen on the console are marked "e.g.".
-- The grandMA2 property data covers 61 more console classes and 106 more value lists, each written to a grandMA2 onPC 3.9 console and read back. The 43 lists known to be whole (read off the console's dropdown, or walked by index to the console's end-of-list marker, such as DMX In Merge, sheet Readout and arrangement Axis) are shown as complete; the rest are marked "e.g.".
+- The grandMA2 property data covers 61 more console classes and 107 more value lists, each written to a grandMA2 onPC 3.9 console and read back. The 52 lists known to be whole (read off the console's dropdown, or walked by index to the console's end-of-list marker, such as DMX In Merge, sheet Readout and arrangement Axis) are shown as complete; the rest are marked "e.g.".
 - Tests for grouped `&&` / `||` conditions, `[$x]` with no operator and `]` inside quotes.
 - Workspace scans cache plugin manifests per folder.
 

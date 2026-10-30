@@ -94,6 +94,7 @@ test('grandMA2 properties: On/Off and Yes/No list their values, observed samples
   assert.strictEqual(p.ma2ValuesText(byName('CMD_MACRO_LINE_OBJECT', 'Wait')), 'e.g. Follow, Go'); // Follow is also a console keyword: values are written quoted
   assert.strictEqual(p.ma2ValuesText(byName('CMD_SHEET_SET_DISPLAYFLAGS', 'Readout')), 'Natural, Percent, Decimal, Hex, Physical, Decimal16, Hex16'); // index walk ended in Illegal: complete
   assert.strictEqual(p.ma2ValuesText(byName('CMD_DMX_PROFILE_POINT', 'Mode')), 'Linear, Spline, Spline (Break at Start), Spline (Break at End), Step (Start), Step (End)'); // walk ended in []
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_SHEET_SET_DISPLAYFLAGS', 'Cue Colors')), 'Off, On, My Exec'); // read off the sheet's Display tab: not a plain On/Off
   assert.strictEqual(p.ma2ValuesText(byName('CMD_TIMER', 'Alert Range')), 'e.g. Local, Global'); // index walk clamped at the last value: may be incomplete
   assert.strictEqual(p.ma2ValuesText(rows.find((p) => p.type === 'text')), '');
   assert.match(p.propsMarkdown('TimeConfig', rows), /\| RegardDaylightSaving \| On\/Off \| On, Off \|/);
