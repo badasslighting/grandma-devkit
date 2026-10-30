@@ -3,6 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { bracketCallToLuaIf, decodeLuaString } = require('../lib/bracketFix');
 const V = require('../lib/variables');
+const NUM = 'local function N(s) s = tostring(s); if s:match("^%s*[+-]?%d+%.?%d*%s*$") or s:match("^%s*[+-]?%.%d+%s*$") then return tonumber(s) end end';
+const PRE = (scope, name) => `${NUM}; local v = N(GetVar(${scope}Vars(), "${name}"))`;
 
 const fix = (line, scopeOf) => {
   const r = bracketCallToLuaIf(line, scopeOf);
@@ -10,16 +12,16 @@ const fix = (line, scopeOf) => {
 };
 
 test('quick fix: a [condition] Cmd line becomes a Lua if', () => {
-  assert.strictEqual(fix('Cmd("[$x > 1] Go+ Executor 1")'), 'do local v = tonumber((GetVar(GlobalVars(), "x"))); if v ~= nil and v > 1 then Cmd("Go+ Executor 1") end end');
-  assert.strictEqual(fix("  gma.cmd('[$v==5] Off Page 3')"), '  do local v = tonumber((GetVar(GlobalVars(), "v"))); if v ~= nil and v == 5 then Cmd("Off Page 3") end end');
+  assert.strictEqual(fix('Cmd("[$x > 1] Go+ Executor 1")'), 'do ' + PRE('Global', 'x') + '; if v ~= nil and v > 1 then Cmd("Go+ Executor 1") end end');
+  assert.strictEqual(fix("  gma.cmd('[$v==5] Off Page 3')"), '  do ' + PRE('Global', 'v') + '; if v ~= nil and v == 5 then Cmd("Off Page 3") end end');
   assert.strictEqual(fix('Cmd("[$s==\\"yes\\"] Label Macro 1 \\"a\\"")'), 'do local v = GetVar(GlobalVars(), "s"); if v ~= nil and tostring(v) == "yes" then Cmd("Label Macro 1 \\"a\\"") end end');
-  assert.strictEqual(fix('Cmd("[$x==5] Go+");  -- later'), 'do local v = tonumber((GetVar(GlobalVars(), "x"))); if v ~= nil and v == 5 then Cmd("Go+") end end -- later');
-  assert.strictEqual(fix('Cmd("[$x>=5] Go+")', (n) => (n === 'x' ? 'user' : 'global')), 'do local v = tonumber((GetVar(UserVars(), "x"))); if v ~= nil and v >= 5 then Cmd("Go+") end end');
-  assert.strictEqual(fix('Cmd("[$a==$b] Go+")'), 'do local v, w = GetVar(GlobalVars(), "a"), GetVar(GlobalVars(), "b"); if v ~= nil and w ~= nil and (tostring(v) == tostring(w) or tonumber(v) ~= nil and tonumber(v) == tonumber(w)) then Cmd("Go+") end end');
+  assert.strictEqual(fix('Cmd("[$x==5] Go+");  -- later'), 'do ' + PRE('Global', 'x') + '; if v ~= nil and v == 5 then Cmd("Go+") end end -- later');
+  assert.strictEqual(fix('Cmd("[$x>=5] Go+")', (n) => (n === 'x' ? 'user' : 'global')), 'do ' + PRE('User', 'x') + '; if v ~= nil and v >= 5 then Cmd("Go+") end end');
+  assert.strictEqual(fix('Cmd("[$a==$b] Go+")'), 'do ' + NUM + '; local v, w = GetVar(GlobalVars(), "a"), GetVar(GlobalVars(), "b"); if v ~= nil and w ~= nil and (tostring(v) == tostring(w) or N(v) ~= nil and N(w) ~= nil and N(v) == N(w)) then Cmd("Go+") end end');
 });
 
 test('quick fix: a backslash in the command stays one backslash', () => {
-  assert.strictEqual(fix('Cmd("[$x==1] Import \\"a\\\\b.xml\\"")'), 'do local v = tonumber((GetVar(GlobalVars(), "x"))); if v ~= nil and v == 1 then Cmd("Import \\"a\\\\b.xml\\"") end end');
+  assert.strictEqual(fix('Cmd("[$x==1] Import \\"a\\\\b.xml\\"")'), 'do ' + PRE('Global', 'x') + '; if v ~= nil and v == 1 then Cmd("Import \\"a\\\\b.xml\\"") end end');
 });
 
 test('quick fix: not offered where the line is not one whole Cmd call', () => {
@@ -50,15 +52,15 @@ test('quick fix: not offered where the condition cannot be translated safely', (
   ]) assert.strictEqual(fix(`Cmd("[${c.replace(/"/g, '\\"')}] Go+")`), null, c);
   // a text value with == is fine; ordering two numbers is fine
   assert.strictEqual(fix('Cmd("[$a==yes] Go+")'), 'do local v = GetVar(GlobalVars(), "a"); if v ~= nil and tostring(v) == "yes" then Cmd("Go+") end end');
-  assert.strictEqual(fix('Cmd("[$a<2.5] Go+")'), 'do local v = tonumber((GetVar(GlobalVars(), "a"))); if v ~= nil and v < 2.5 then Cmd("Go+") end end');
+  assert.strictEqual(fix('Cmd("[$a<2.5] Go+")'), 'do ' + PRE('Global', 'a') + '; if v ~= nil and v < 2.5 then Cmd("Go+") end end');
 });
 
 test('quick fix: a "]" inside quotes after the condition is part of the command', () => {
-  assert.strictEqual(fix('Cmd("[$a==1] Label Macro 1 \\"x]y\\"")'), 'do local v = tonumber((GetVar(GlobalVars(), "a"))); if v ~= nil and v == 1 then Cmd("Label Macro 1 \\"x]y\\"") end end');
+  assert.strictEqual(fix('Cmd("[$a==1] Label Macro 1 \\"x]y\\"")'), 'do ' + PRE('Global', 'a') + '; if v ~= nil and v == 1 then Cmd("Label Macro 1 \\"x]y\\"") end end');
 });
 
 test('conditionToLua: only a single plain comparison', () => {
-  assert.deepStrictEqual(V.conditionToLua('$a == 1'), { pre: 'local v = tonumber((GetVar(GlobalVars(), "a")))', test: 'v ~= nil and v == 1' });
+  assert.deepStrictEqual(V.conditionToLua('$a == 1'), { pre: PRE('Global', 'a'), test: 'v ~= nil and v == 1' });
   assert.strictEqual(V.conditionToLua('$a==1 && $b==2'), null);
   assert.strictEqual(V.conditionToLua('$a!=1'), null);
   assert.strictEqual(V.conditionToLua('$SHOWFILE==x'), null);
@@ -73,11 +75,11 @@ test('decodeLuaString', () => {
 test('conditionToLua: an unset or text variable skips the branch instead of raising a Lua error', () => {
   // grandMA2 makes the comparison false; a bare GetVar(...) > 1 is "attempt to compare nil with number" when unset
   const gt = V.conditionToLua('$x > 1');
-  assert.strictEqual(gt.pre, 'local v = tonumber((GetVar(GlobalVars(), "x")))'); // text "abc" -> nil, "5" -> 5
+  assert.strictEqual(gt.pre, PRE('Global', 'x')); // text "abc" -> nil, "5" -> 5
   assert.strictEqual(gt.test, 'v ~= nil and v > 1'); // unset -> nil -> skipped
   assert.strictEqual(V.conditionToLua('3 < $x').test, 'v ~= nil and 3 < v');
   // [$x == 5] is numeric on grandMA2 even when x holds "5"
-  assert.strictEqual(V.conditionToLua('$x == 5').pre, 'local v = tonumber((GetVar(GlobalVars(), "x")))');
+  assert.strictEqual(V.conditionToLua('$x == 5').pre, PRE('Global', 'x'));
   // text and variable-to-variable equality: unset skips, numbers compare as numbers
   assert.strictEqual(V.conditionToLua('$s == yes').test, 'v ~= nil and tostring(v) == "yes"');
   assert.match(V.conditionToLua('$a == $b').test, /^v ~= nil and w ~= nil and /);
@@ -87,7 +89,7 @@ test('conditionToLua: an unset or text variable skips the branch instead of rais
 
 test('quick fix: the result is one statement even with a local (a do block), so it can replace the line', () => {
   const r = fix('Cmd("[$x > 1] Go+")');
-  assert.ok(r.startsWith('do local v = ') && r.endsWith(' end end'), r);
+  assert.ok(r.startsWith('do local ') && r.endsWith(' end end'), r);
   assert.strictEqual(fix('Cmd("[1 < 2] Go+")'), 'if 1 < 2 then Cmd("Go+") end');
 });
 
