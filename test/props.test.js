@@ -83,7 +83,7 @@ test('grandMA2 properties: On/Off and Yes/No list their values, observed samples
   const sample = p.ma2Props('LayoutElementDefaults').find((p) => p.name === 'FontSize');
   assert.strictEqual(p.ma2ValuesText(sample), 'Default, Small, Big'); // confirmed on a console: the three font sizes
   const symbol = p.ma2Props('LayoutElementDefaults').find((x) => x.name === 'Symbol');
-  assert.strictEqual(p.ma2ValuesText(symbol), 'e.g. Small, Big'); // Fit is refused on onPC 3.9.61.1
+  assert.strictEqual(p.ma2ValuesText(symbol), 'No symbol, Small, Big'); // index walk on onPC 3.9.61.1 ends in Illegal after Big
   const byName = (c, n) => p.ma2Props(c).find((x) => x.name === n);
   assert.strictEqual(p.ma2ValuesText(byName('LayoutElementDefaults', 'Visualization')), 'Pool icon, Filled, None, Spot');
   assert.strictEqual(p.ma2ValuesText(byName('LayoutElementDefaults', 'ImageSize')), 'Small, Big, Fit');
@@ -92,6 +92,12 @@ test('grandMA2 properties: On/Off and Yes/No list their values, observed samples
   assert.strictEqual(p.ma2ValuesText(byName('CMD_DMX_UNIVERSE', 'DMX In Merge')), 'HTP, Off, LoTP'); // read off the console dropdown, then written and read back
   assert.strictEqual(p.ma2ValuesText(byName('CMD_PSN_SYSTEM', 'X map')), 'X, Y, Z'); // an axis choice, not a coordinate; numbers 0-2 index the same list
   assert.strictEqual(p.ma2ValuesText(byName('CMD_MACRO_LINE_OBJECT', 'Wait')), 'e.g. Follow, Go'); // Follow is also a console keyword: values are written quoted
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_SHEET_SET_DISPLAYFLAGS', 'Readout')), 'Natural, Percent, Decimal, Hex, Physical, Decimal16, Hex16'); // index walk ended in Illegal: complete
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_DMX_PROFILE_POINT', 'Mode')), 'Linear, Spline, Spline (Break at Start), Spline (Break at End), Step (Start), Step (End)'); // walk ended in []
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_SHEET_SET_DISPLAYFLAGS', 'Cue Colors')), 'Off, On, My Exec'); // read off the sheet's Display tab: not a plain On/Off
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_SHEET_SET_DISPLAYFLAGS', 'Show Additional')), 'Show only Values, Show IDs, Show Attributes, Show Address'); // the index walk missed Show Address; read off the DMX sheet
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_TIMER', 'Alert Range')), 'Local, Global'); // a two-state toggle in the Timer editor: complete
+  assert.strictEqual(p.ma2ValuesText(byName('CMD_TIMECODE', 'Switch Off')), 'e.g. Playbacks Off, Keep Playbacks'); // index walk clamped at the last value: may be incomplete
   assert.strictEqual(p.ma2ValuesText(rows.find((p) => p.type === 'text')), '');
   assert.match(p.propsMarkdown('TimeConfig', rows), /\| RegardDaylightSaving \| On\/Off \| On, Off \|/);
 });
