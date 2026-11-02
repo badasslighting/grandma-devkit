@@ -7,6 +7,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,8 +25,18 @@ jobs:
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: npx --yes ovsx publish ./*.vsix -p "$OVSX_PAT"
-      - name: Publish to VS Code Marketplace
+      # Marketplace, preferred: Trusted Publishing. No stored token: Marketplace trusts this workflow through a policy
+      # on the publisher's Trusted Publishing page (owner badasslighting, repo grandma-devkit, workflow publish.yml).
+      # Until that policy exists the step fails without failing the release (Open VSX has already published above).
+      - name: Publish to VS Code Marketplace (Trusted Publishing)
+        if: env.VSCE_PAT == ''
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        continue-on-error: true
+        run: npx --yes @vscode/vsce publish --packagePath ./*.vsix --oidc
+      # Marketplace with a token, only while a VSCE_PAT secret is set. Global PATs are retired on 2026-12-01.
+      - name: Publish to VS Code Marketplace (PAT)
         if: env.VSCE_PAT != ''
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx --yes @vscode/vsce publish --packagePath ./*.vsix -p "$VSCE_PAT"
