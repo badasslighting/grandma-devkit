@@ -22,7 +22,7 @@ test('missing required arguments', () => {
 });
 
 test('Cmd inside a loop', () => {
-  assert.deepStrictEqual(rules('for i = 1, 3 do\n  Cmd("Go+")\nend\nCmd("x")'), ['cmd-in-loop@1']);
+  assert.deepStrictEqual(rules('for i = 1, 3 do\n  Cmd("Go+")\nend\nCmd("ClearAll")'), ['cmd-in-loop@1']);
   assert.deepStrictEqual(rules('repeat\n  Cmd("a")\nuntil done'), ['cmd-in-loop@1']);
 });
 
@@ -36,4 +36,11 @@ test('global assignment only at top level of a statement', () => {
   const f = lintRules('count = 0\nlocal n = 1\nn = 2\nlocal t = {\n  a = 1,\n}\nfor i = 1, 2 do end\nfunction Main() end', api, { globals: true });
   assert.deepStrictEqual(lintRules('count = 0', api), []);
   assert.deepStrictEqual(f.map((x) => [x.rule, x.line, x.severity]), [['global-assign', 0, 'hint']]);
+});
+
+test('command grammar findings come out of lintRules, with the string offset, and ma3.lint.commandGrammar turns them off', () => {
+  const src = 'Cmd("Go+ Sequence 1")\nCmd("Dleete Group 3")';
+  const found = lintRules(src, null, { target: 'ma3' }).filter((f) => f.rule === 'grammar-unknown-keyword');
+  assert.deepStrictEqual(found.map((f) => [f.line, f.col, f.len]), [[1, 5, 6]]);
+  assert.strictEqual(lintRules(src, null, { target: 'ma3', grammar: false }).filter((f) => f.rule.startsWith('grammar-')).length, 0);
 });

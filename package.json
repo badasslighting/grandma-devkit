@@ -278,6 +278,11 @@
           "default": true,
           "markdownDescription": "Inside `Cmd(\"...\")` strings, complete group, sequence, macro, preset and similar numbers with the labels from the show running in onPC, through the LuaBridge plugin. The lookup takes a few milliseconds of console time, at most once a minute, and only while the bridge is running."
         },
+        "ma3.lint.commandGrammar": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Check the console commands inside `Cmd(\"...\")` strings against the grandMA2 / grandMA3 command grammar: unknown keywords, keywords of the other console, unknown `/options`, a missing object, a stray `Thru` or an empty `At`. Findings are hints."
+        },
         "ma3.lint.globals": {
           "type": "boolean",
           "default": false,

@@ -481,7 +481,7 @@ function activate(context) {
       message: `Loop never yields, breaks or returns; it will freeze the console. Add ${target === 'ma2' ? 'gma.sleep(seconds)' : 'coroutine.yield(seconds)'} or use a timer.`,
       fix: { kind: 'yield', text: target === 'ma2' ? 'gma.sleep(0.1)' : 'coroutine.yield(0.1)' },
     }));
-    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), target }));
+    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), grammar: cfg().get('lint.commandGrammar'), target }));
   }
   const findingRange = (doc, f) =>
     f.len ? new vscode.Range(f.line, f.col, f.line, f.col + f.len) : doc.lineAt(Math.min(f.line, doc.lineCount - 1)).range;
