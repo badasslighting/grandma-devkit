@@ -32,6 +32,11 @@ const { enumNamesLua, enumMembersLua, attributeNamesLua, parseNames, parseMember
 const bridge = require('./lib/bridge');
 const { defaultBridgeDir, defaultBridgeDirMa2 } = bridge;
 
+const isPathInside = (baseDir, targetPath) => {
+  const rel = path.relative(path.resolve(baseDir), path.resolve(targetPath));
+  return !(rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel));
+};
+
 const LUA = { language: 'lua' };
 const cfg = () => vscode.workspace.getConfiguration('ma3');
 const pluginsFolder = () => cfg().get('pluginsPath') || defaultPluginsPath();
@@ -675,10 +680,14 @@ function activate(context) {
         }
         const version = (/<Plugin\b[^>]*?\bVersion="([^"]*)"/.exec(xml) || [])[1];
         const name = path.basename(manifest, path.extname(manifest));
-        const files = filesForManifest(manifest).map((f) => ({ name: path.basename(f), data: fs.readFileSync(f) }));
+        const files = filesForManifest(manifest).map((f) => {
+          if (!isPathInside(path.dirname(manifest), f)) throw new Error('Invalid file path');
+          return { name: path.basename(f), data: fs.readFileSync(f) };
+        });
         const dist = path.join(path.dirname(manifest), 'dist');
         fs.mkdirSync(dist, { recursive: true });
         const out = path.join(dist, `${name}${version ? `-${version}` : ''}.zip`);
+        if (!isPathInside(dist, out)) throw new Error('Invalid file path');
         fs.writeFileSync(out, zip(files));
         const pick = await vscode.window.showInformationMessage(`Packaged ${files.length} files${note}: ${path.basename(out)}`, 'Reveal');
         if (pick === 'Reveal') vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(out));
