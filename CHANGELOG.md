@@ -4,6 +4,7 @@
 
 - Command grammar hints: Cmd() strings are checked against the grandMA2 / grandMA3 command grammar (unknown keywords, the other console's keywords, unknown `/options`, a stray `Thru`) (`ma3.lint.commandGrammar`).
 - Show-aware hints: a Cmd() reference to a pool object that is not in the loaded show is marked, with the nearest numbers that exist (`ma3.lint.showRefs`).
+- Frame budget: a `Timer`, `HookObjectChange` or `gma.timer` callback that reaches `ObjectList`, `:Children()` and other heavy calls through local functions gets a hint naming the chain (`heavy-reachable`, `ma3.lint.frameBudget`), and a CodeLens above each callback, signal handler and plugin function counts the heavy calls it reaches (`ma3.codelens.frameBudget`).
 - **Find Usages of Console Object** lists every Cmd() string and macro line that uses `Macro 12`, `Preset 2.5` and so on (ranges included) and says what the loaded show holds under that number; **at Cursor** from the editor context menu.
 
 ## 0.4.4

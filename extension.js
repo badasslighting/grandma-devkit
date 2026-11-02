@@ -496,7 +496,7 @@ function activate(context) {
         getShow(false, target === 'ma2' ? 'ma2' : 'ma3');
       }
     }
-    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), grammar: cfg().get('lint.commandGrammar'), target, show }));
+    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), grammar: cfg().get('lint.commandGrammar'), frameBudget: cfg().get('lint.frameBudget'), target, show }));
   }
   const findingRange = (doc, f) =>
     f.len ? new vscode.Range(f.line, f.col, f.line, f.col + f.len) : doc.lineAt(Math.min(f.line, doc.lineCount - 1)).range;
@@ -565,9 +565,27 @@ function activate(context) {
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
     )
   );
+  // ---- frame budget CodeLens (static); ma3.profileFunction is the hook for the live profiler (not built yet)
+  const lensChanged = new vscode.EventEmitter();
+  context.subscriptions.push(
+    lensChanged,
+    vscode.languages.registerCodeLensProvider(LUA, {
+      onDidChangeCodeLenses: lensChanged.event,
+      provideCodeLenses(doc) {
+        if (!cfg().get('codelens.frameBudget')) return [];
+        return require('./lib/frameBudget').lenses(doc.getText()).map(
+          (l) => new vscode.CodeLens(new vscode.Range(l.line, 0, l.line, 0), { title: l.title, command: 'ma3.profileFunction', arguments: [{ uri: doc.uri, name: l.name, line: l.line }] })
+        );
+      },
+    }),
+    vscode.commands.registerCommand('ma3.profileFunction', () =>
+      vscode.window.showInformationMessage('Frame budget: this is the static estimate. Live profiling on the console is not available yet.')
+    )
+  );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('ma3')) vscode.workspace.textDocuments.forEach(refresh);
+      if (e.affectsConfiguration('ma3.codelens')) lensChanged.fire();
     })
   );
   vscode.workspace.textDocuments.forEach(refresh);

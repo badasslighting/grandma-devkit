@@ -291,6 +291,16 @@
           "default": true,
           "markdownDescription": "Hint when a `Cmd(\"...\")` string runs, selects or deletes a group, sequence, macro, preset or other pool object that is not in the show last read from the console through the LuaBridge (see `ma3.liveCompletion`). Commands that can create the object (Store, Copy, Label, Import...) and pools longer than the cached list are never checked."
         },
+        "ma3.lint.frameBudget": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Hint when a `Timer`, `HookObjectChange` or `gma.timer` callback reaches a heavy call (`ObjectList`, `:Children()`, `CmdIndirectWait`, `FindRecursive`, `Dump`) through local functions it calls. The hint names the chain."
+        },
+        "ma3.codelens.frameBudget": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show a frame-budget line above each callback, signal handler and plugin function: the heavy calls it reaches (static estimate)."
+        },
         "ma3.lint.globals": {
           "type": "boolean",
           "default": false,
