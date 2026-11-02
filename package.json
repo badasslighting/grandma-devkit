@@ -65,6 +65,8 @@
       { "command": "ma3.telnet.stopMonitor", "title": "Stop Console Monitor", "category": "grandMA" },
       { "command": "ma3.installBridge", "title": "Install LuaBridge on Console", "category": "grandMA" },
       { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA" },
+      { "command": "ma3.findObjectUsages", "title": "Find Usages of Console Object", "category": "grandMA" },
+      { "command": "ma3.findObjectUsagesAtCursor", "title": "Find Usages of Console Object at Cursor", "category": "grandMA" },
       { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA" },
       { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA" },
       { "command": "ma3.vars.replaceRange", "title": "Replace Variables Across a Range ($color1 thru $color5)", "category": "grandMA" },
@@ -138,7 +140,8 @@
         { "command": "ma3.vars.extract", "when": "(editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro) && editorHasSelection", "group": "ma3vars@3" },
         { "command": "ma3.vars.convert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@4" },
         { "command": "ma3.bank.insert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@5" },
-        { "command": "ma3.bank.favorite", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@6" }
+        { "command": "ma3.bank.favorite", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@6" },
+        { "command": "ma3.findObjectUsagesAtCursor", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro || editorLangId == xml", "group": "ma3@9" }
       ]
     },
     "configuration": {

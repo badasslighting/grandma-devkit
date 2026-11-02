@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.5
+
+- Command grammar hints: Cmd() strings are checked against the grandMA2 / grandMA3 command grammar (unknown keywords, the other console's keywords, unknown `/options`, a stray `Thru`) (`ma3.lint.commandGrammar`).
+- Show-aware hints: a Cmd() reference to a pool object that is not in the loaded show is marked, with the nearest numbers that exist (`ma3.lint.showRefs`).
+- **Find Usages of Console Object** lists every Cmd() string and macro line that uses `Macro 12`, `Preset 2.5` and so on (ranges included) and says what the loaded show holds under that number; **at Cursor** from the editor context menu.
+
 ## 0.4.4
 
 - The `bracket-ma3` quick fix now writes safe Lua: an unset or text variable skips the command instead of raising an error, numbers are read the way grandMA2 reads them, and conditions that can't be translated safely (`!=`, grandMA2 system variables, quoted numbers, ordering two variables, odd `$` operands) get no fix.

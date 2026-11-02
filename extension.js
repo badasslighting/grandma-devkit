@@ -21,7 +21,8 @@ const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus }
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget, detectTargetForFile } = require('./lib/target');
 const varFeatures = require('./lib/varFeatures');
-const { macroKind } = require('./lib/macroFiles');
+const { macroKind, toRaw } = require('./lib/macroFiles');
+const objectUsages = require('./lib/objectUsages');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
@@ -1474,6 +1475,56 @@ function activate(context) {
     onChange: () => vscode.workspace.textDocuments.forEach(refresh),
   });
   vscode.workspace.textDocuments.forEach(refresh);
+
+  // ---- Find Usages of Console Object: where Macro 12 / Preset 2.5 is named across the workspace (lib/objectUsages.js),
+  // over the variable index's files, plus what the cached show holds under that number (no bridge call).
+  let usageIndex = null;
+  const editorTarget = () => {
+    const ed = vscode.window.activeTextEditor;
+    const k = ed && macroKind(ed.document.fileName, ed.document.getText());
+    return k ? k.target : activeTarget();
+  };
+  async function showUsages(kind, no) {
+    const obj = objectUsages.parseObject(kind, no);
+    if (!obj) return vscode.window.showWarningMessage(`Not a console object: ${[kind, no].filter(Boolean).join(' ')}`);
+    usageIndex = objectUsages.buildObjectIndex(
+      vars.entries().map((e) => ({ file: e.file, text: e.text, target: e.scan.target })),
+      usageIndex
+    );
+    const usages = objectUsages.findUsages(usageIndex, obj.kind, obj.no);
+    const qp = vscode.window.createQuickPick();
+    qp.title = objectUsages.showLine(showCaches[editorTarget()].data, obj.kind, obj.no) || undefined;
+    qp.placeholder = `${usages.length} usage${usages.length === 1 ? '' : 's'} of ${obj.kind} ${obj.no}`;
+    qp.matchOnDescription = true;
+    qp.items = usages.map((u) => ({ label: `${vscode.workspace.asRelativePath(u.file)}:${u.line + 1}`, description: u.text, usage: u }));
+    qp.onDidAccept(async () => {
+      const u = qp.selectedItems[0] && qp.selectedItems[0].usage;
+      qp.hide();
+      if (u) await vscode.window.showTextDocument(vscode.Uri.file(u.file), { selection: new vscode.Range(u.line, u.col, u.line, u.col + u.len) });
+    });
+    qp.onDidHide(() => qp.dispose());
+    qp.show();
+    return usages;
+  }
+  context.subscriptions.push(
+    // args {kind, no} (or {no: 'Preset 2.5'}) skip the prompts; the usages are returned for scripts
+    vscode.commands.registerCommand('ma3.findObjectUsages', async (args) => {
+      if (args && args.no !== undefined) return showUsages(args.kind, args.no);
+      const kind = await vscode.window.showQuickPick(objectUsages.KINDS, { placeHolder: 'Console object kind' });
+      if (!kind) return;
+      const no = await vscode.window.showInputBox({ prompt: `${kind} number`, placeHolder: kind === 'Preset' ? '2.5' : '12', validateInput: (v) => (objectUsages.parseObject(kind, v) ? null : kind === 'Preset' ? 'type.number, e.g. 2.5' : 'a number') });
+      if (no) return showUsages(kind, no);
+    }),
+    vscode.commands.registerCommand('ma3.findObjectUsagesAtCursor', async () => {
+      const ed = vscode.window.activeTextEditor;
+      const cmd = ed && vars.commandAt(ed.document, ed.selection.active);
+      const offset = ed && ed.document.offsetAt(ed.selection.active);
+      const abs = cmd && (cmd.segment ? (a) => toRaw(cmd.segment, a, 0).start : (a) => cmd.offset + a);
+      const ref = cmd && objectUsages.refAt(cmd.text, cmd.target || targetOf(ed.document), offset, abs, { dynamic: cmd.dynamic });
+      if (!ref) return vscode.window.showInformationMessage('Put the cursor on a console object reference (such as Macro 12) in a command string or macro line.');
+      return showUsages(ref.kind, ref.no);
+    })
+  );
 
   // Replaces the API list (saved so it survives restarts), and re-checks every open file against it.
   function applyApi(api) {
