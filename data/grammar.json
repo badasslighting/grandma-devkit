@@ -1807,6 +1807,7 @@
     "name": "Import",
     "kind": "verb",
     "options": [
+     "file",
      "noconfirm",
      "path",
      "quiet"
@@ -6397,6 +6398,7 @@
     "name": "Import",
     "kind": "verb",
     "options": [
+     "file",
      "gaps",
      "nodependencies",
      "norefresh",
@@ -8885,6 +8887,7 @@
    }
   },
   "aliases": {
+   "cd": "ChangeDestination",
    "go": "Go+"
   },
   "objectTypes": [
@@ -9382,5 +9385,8 @@
    "Video",
    "Width"
   ]
- }
+ },
+ "unknownKeywordIgnorePrefixes": [
+  "_"
+ ]
 }

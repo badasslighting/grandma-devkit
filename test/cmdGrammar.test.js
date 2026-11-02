@@ -94,6 +94,32 @@ test('dynamic or unfinished strings are not checked', () => {
   assert.deepStrictEqual(checkGrammar('Stroe Cue 1', 'ma2', { dynamic: true }), []);
 });
 
+// False positives found scanning real plugin Lua; fixed by data/grammar-src/overrides.json.
+test('overrides: cd is ChangeDestination on both consoles', () => {
+  for (const c of ['cd pl', 'CD Root', 'Cd ColorTheme', 'CD ..']) {
+    assert.deepStrictEqual(checkGrammar(c, 'ma2'), [], `ma2: ${c}`);
+    assert.deepStrictEqual(checkGrammar(c, 'ma3'), [], `ma3: ${c}`);
+  }
+  assert.deepStrictEqual(rules('cdx pl', 'ma3'), ['grammar-unknown-keyword']);
+});
+
+test('overrides: Import accepts /File and /Path, still rejects other options', () => {
+  const c = 'Import Plugin 3 /File "X.xml" /Path "C:/a/b"';
+  assert.deepStrictEqual(rules(c, 'ma3'), []);
+  assert.deepStrictEqual(rules(c, 'ma2'), []);
+  assert.deepStrictEqual(rules('Import Plugin 3 /bogus', 'ma3'), ['grammar-unknown-option']);
+});
+
+test('overrides: an underscore-prefixed first word is never an unknown keyword', () => {
+  for (const c of ['_DebugSpeedMultiplier 2', '_DebugSpeedMultiplier 0.5 ; Go+']) {
+    assert.deepStrictEqual(rules(c, 'ma3'), [], c);
+    assert.deepStrictEqual(rules(c, 'ma2'), [], c);
+  }
+  assert.deepStrictEqual(rules('Qzx _x', 'ma3'), ['grammar-unknown-keyword']);
+});
+
+const FROM_REAL_PLUGINS = ['cd pl', 'CD Root', 'Cd ColorTheme', 'Import Plugin 3 /File "X.xml" /Path "C:/a/b"', '_DebugSpeedMultiplier 2'];
+
 const MA2_VALID = [
   'Go+ Executor 1', 'Go+ Executor 1.5', 'Go- Executor 2', 'Go Executor 3 Cue 5', 'Goto Cue 5 Executor 1', 'GoBack Executor 1',
   'Go+ Sequence 1', 'Store Cue 3 /nc', 'Store Cue 3 /o', 'Store Cue 1 Sequence 5 /merge', 'Store Group 4 "Front Wash" /o',
@@ -133,6 +159,8 @@ const MA3_VALID = [
 
 test('no false positives on realistic valid commands', () => {
   assert.ok(MA2_VALID.length >= 60 && MA3_VALID.length >= 60);
+  MA2_VALID.push(...FROM_REAL_PLUGINS);
+  MA3_VALID.push(...FROM_REAL_PLUGINS);
   for (const c of MA2_VALID) assert.deepStrictEqual(checkGrammar(c, 'ma2'), [], `ma2: ${c}`);
   for (const c of MA3_VALID) assert.deepStrictEqual(checkGrammar(c, 'ma3'), [], `ma3: ${c}`);
 });

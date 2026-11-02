@@ -85,6 +85,23 @@ function optionList(raw, lines) {
   return set.size ? [...set].sort() : null;
 }
 
+// Hand-maintained corrections (data/grammar-src/overrides.json), applied on top of the raw manual data.
+const OVERRIDES = JSON.parse(fs.readFileSync(path.join(SRC, 'overrides.json'), 'utf8'));
+
+function applyOverrides(consoleId, keywords, aliases) {
+  const o = OVERRIDES[consoleId] || {};
+  for (const [alias, { target }] of Object.entries(o.aliases || {})) {
+    if (!keywords[target.toLowerCase()]) throw new Error(`overrides: ${consoleId} alias ${alias} -> unknown keyword ${target}`);
+    if (keywords[alias]) continue; // the manual has the word as a keyword of its own
+    aliases[alias] = keywords[target.toLowerCase()].name;
+  }
+  for (const [name, { add }] of Object.entries(o.options || {})) {
+    const k = keywords[name.toLowerCase()];
+    if (!k) throw new Error(`overrides: ${consoleId} options for unknown keyword ${name}`);
+    k.options = [...new Set([...(k.options || []), ...add.map((a) => a.toLowerCase())])].sort();
+  }
+}
+
 function build(file, consoleId) {
   const raw = JSON.parse(fs.readFileSync(path.join(SRC, file), 'utf8'));
   const keywords = {};
@@ -125,6 +142,7 @@ function build(file, consoleId) {
     };
   }
   for (const a of Object.keys(aliases)) if (keywords[a]) delete aliases[a];
+  applyOverrides(consoleId, keywords, aliases);
   let objectTypes;
   if (raw.objectKeywordList) {
     objectTypes = raw.objectKeywordList.filter((o) => keywords[o]).map((o) => keywords[o].name);
@@ -143,7 +161,8 @@ function main() {
     ma2: words(ma2).filter((k) => !ma3.keywords[k] && !ma3.aliases[k]).map((k) => ma2.keywords[k].name),
     ma3: words(ma3).filter((k) => !ma2.keywords[k] && !ma2.aliases[k]).map((k) => ma3.keywords[k].name),
   };
-  const out = { generatedBy: 'scripts/build-grammar.js', ma2, ma3, onlyIn };
+  const unknownKeywordIgnorePrefixes = (OVERRIDES.unknownKeywordIgnorePrefixes || []).map((p) => p.prefix).sort();
+  const out = { generatedBy: 'scripts/build-grammar.js', ma2, ma3, onlyIn, unknownKeywordIgnorePrefixes };
   fs.writeFileSync(OUT, JSON.stringify(out, null, 1) + '\n');
   console.log(`grammar.json: ma2 ${Object.keys(ma2.keywords).length} keywords, ma3 ${Object.keys(ma3.keywords).length}; only ma2 ${onlyIn.ma2.length}, only ma3 ${onlyIn.ma3.length}`);
 }
