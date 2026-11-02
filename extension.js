@@ -49,7 +49,9 @@ const userSetting = (key) => {
 };
 const pluginsFolder = () => userSetting('pluginsPath') || defaultPluginsPath();
 const ma2PluginsFolder = () => userSetting('ma2.pluginsPath') || defaultMa2PluginsPath();
-const bridgeDirFor = (target) => (target === 'ma2' ? cfg().get('ma2.bridgeDir') || defaultBridgeDirMa2() : cfg().get('bridge.dir') || defaultBridgeDir());
+// The bridge folder is honoured only from the user's own settings: a workspace-supplied folder could hold
+// attacker-planted files or symlinks that the extension host would then read and write.
+const bridgeDirFor = (target) => (target === 'ma2' ? userSetting('ma2.bridgeDir') || defaultBridgeDirMa2() : userSetting('bridge.dir') || defaultBridgeDir());
 
 // Which console a Lua document targets (lib/target.js has the order of the signals): the ma3.target
 // setting, the manifest that lists the file, the folder it is in, then the API names in the code.
