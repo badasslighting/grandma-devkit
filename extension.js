@@ -680,13 +680,20 @@ function activate(context) {
         await vscode.workspace.saveAll(false);
         let xml = fs.readFileSync(manifest, 'utf8');
         let note = '';
+        // The version becomes part of the archive file name, so it must not contain path syntax.
+        const versionOf = (text) => (/<Plugin\b[^>]*?\bVersion="([^"]*)"/.exec(text) || [])[1];
+        const assertSafeVersion = (v) => {
+          if (v && !/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(v)) throw new Error('Invalid plugin version');
+        };
+        assertSafeVersion(versionOf(xml));
         if (part !== 'none') {
           const bumped = bumpVersion(xml, part);
+          assertSafeVersion(versionOf(bumped.xml));
           xml = bumped.xml;
           fs.writeFileSync(manifest, xml);
           note = ` (version ${bumped.from} -> ${bumped.to})`;
         }
-        const version = (/<Plugin\b[^>]*?\bVersion="([^"]*)"/.exec(xml) || [])[1];
+        const version = versionOf(xml);
         const name = path.basename(manifest, path.extname(manifest));
         const files = filesForManifest(manifest).map((f) => {
           if (!isPathInside(path.dirname(manifest), f)) throw new Error('Invalid file path');
@@ -696,6 +703,10 @@ function activate(context) {
         fs.mkdirSync(dist, { recursive: true });
         const out = path.join(dist, `${name}${version ? `-${version}` : ''}.zip`);
         if (!isPathInside(dist, out)) throw new Error('Invalid file path');
+        // Reject symlinked output locations that would redirect the write outside the plugin folder.
+        if (!isPathInside(fs.realpathSync(path.dirname(manifest)), fs.realpathSync(dist))) throw new Error('Invalid file path');
+        const outStat = fs.lstatSync(out, { throwIfNoEntry: false });
+        if (outStat && outStat.isSymbolicLink()) throw new Error('Invalid file path');
         fs.writeFileSync(out, zip(files));
         const pick = await vscode.window.showInformationMessage(`Packaged ${files.length} files${note}: ${path.basename(out)}`, 'Reveal');
         if (pick === 'Reveal') vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(out));
