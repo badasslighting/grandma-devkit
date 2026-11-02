@@ -18,6 +18,11 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      # Release tooling is pinned to exact versions so that a newly published (possibly compromised) npm release
+      # cannot execute in this credentialed job. Bump deliberately and review the changelog when updating.
+      VSCE_VERSION: 3.7.1
+      OVSX_VERSION: 0.10.5
     permissions:
       contents: read
       id-token: write
@@ -56,12 +61,12 @@ jobs:
           tag="$TAG"
           test "v$v" = "$tag" || { echo "Tag $tag does not match package.json version $v"; exit 1; }
       - run: npm test
-      - run: npx --yes @vscode/vsce package
+      - run: npx --yes "@vscode/vsce@${VSCE_VERSION}" package
       - name: Publish to Open VSX
         if: ${{ !inputs.marketplace_only }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx --yes ovsx publish ./*.vsix -p "$OVSX_PAT"
+        run: npx --yes "ovsx@${OVSX_VERSION}" publish ./*.vsix -p "$OVSX_PAT"
       # Marketplace, preferred: Trusted Publishing. No stored token: Marketplace trusts this workflow through a policy
       # on the publisher's Trusted Publishing page (owner badasslighting, repo grandma-devkit, workflow publish.yml).
       # Until that policy exists the step fails without failing the release (Open VSX has already published above).
@@ -70,10 +75,10 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         continue-on-error: true
-        run: npx --yes @vscode/vsce publish --packagePath ./*.vsix --oidc
+        run: npx --yes "@vscode/vsce@${VSCE_VERSION}" publish --packagePath ./*.vsix --oidc
       # Marketplace with a token, only while a VSCE_PAT secret is set. Global PATs are retired on 2026-12-01.
       - name: Publish to VS Code Marketplace (PAT)
         if: env.VSCE_PAT != ''
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx --yes @vscode/vsce publish --packagePath ./*.vsix -p "$VSCE_PAT"
+        run: npx --yes "@vscode/vsce@${VSCE_VERSION}" publish --packagePath ./*.vsix -p "$VSCE_PAT"
