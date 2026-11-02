@@ -19,6 +19,7 @@
     "test": "node --test \"test/*.test.js\"",
     "test:ui": "node test/ui/runTest.js",
     "build-api": "node scripts/build-api.js",
+    "build:grammar": "node scripts/build-grammar.js",
     "package": "npx @vscode/vsce package"
   },
   "contributes": {
