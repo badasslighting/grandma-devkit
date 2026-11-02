@@ -283,6 +283,11 @@
           "default": true,
           "markdownDescription": "Check the console commands inside `Cmd(\"...\")` strings against the grandMA2 / grandMA3 command grammar: unknown keywords, keywords of the other console, unknown `/options`, a missing object, a stray `Thru` or an empty `At`. Findings are hints."
         },
+        "ma3.lint.showRefs": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Hint when a `Cmd(\"...\")` string runs, selects or deletes a group, sequence, macro, preset or other pool object that is not in the show last read from the console through the LuaBridge (see `ma3.liveCompletion`). Commands that can create the object (Store, Copy, Label, Import...) and pools longer than the cached list are never checked."
+        },
         "ma3.lint.globals": {
           "type": "boolean",
           "default": false,

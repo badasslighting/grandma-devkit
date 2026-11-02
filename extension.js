@@ -127,8 +127,11 @@ function activate(context) {
     cache.pending = bridge
       .run(dir, target === 'ma2' ? ma2ShowLua() : showLua(), cfg().get('bridge.timeout'))
       .then((r) => {
-        if (r.ok) Object.assign(cache, { at: Date.now(), data: parseShow(r.returns), pending: null });
-        else cache.pending = null;
+        if (r.ok) {
+          Object.assign(cache, { at: Date.now(), data: parseShow(r.returns), pending: null });
+          // show-aware hints (ma3.lint.showRefs) read the cache, so re-lint the Lua files for this console
+          vscode.workspace.textDocuments.filter((d) => d.languageId === 'lua' && targetOf(d) === target).forEach(refresh);
+        } else cache.pending = null;
         return cache.data;
       })
       .catch(() => {
@@ -481,7 +484,18 @@ function activate(context) {
       message: `Loop never yields, breaks or returns; it will freeze the console. Add ${target === 'ma2' ? 'gma.sleep(seconds)' : 'coroutine.yield(seconds)'} or use a timer.`,
       fix: { kind: 'yield', text: target === 'ma2' ? 'gma.sleep(0.1)' : 'coroutine.yield(0.1)' },
     }));
-    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), grammar: cfg().get('lint.commandGrammar'), target }));
+    // show-aware hints use the cached show as it is (lintDoc stays synchronous); a stale or empty cache starts a
+    // fetch in the background, at most once per SHOW_TTL_MS, and getShow re-lints when the data arrives
+    let show = null;
+    if (cfg().get('lint.showRefs')) {
+      const cache = showCaches[target] || showCaches.ma3;
+      show = cache.data;
+      if (Date.now() - cache.at >= SHOW_TTL_MS && !cache.pending && Date.now() - (cache.lintTried || 0) >= SHOW_TTL_MS) {
+        cache.lintTried = Date.now();
+        getShow(false, target === 'ma2' ? 'ma2' : 'ma3');
+      }
+    }
+    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), grammar: cfg().get('lint.commandGrammar'), target, show }));
   }
   const findingRange = (doc, f) =>
     f.len ? new vscode.Range(f.line, f.col, f.line, f.col + f.len) : doc.lineAt(Math.min(f.line, doc.lineCount - 1)).range;
