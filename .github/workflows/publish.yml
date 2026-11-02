@@ -3,6 +3,17 @@ name: Publish to Open VSX and VS Code Marketplace
 on:
   push:
     tags: ['v*']
+  # Run by hand to put an already tagged release on the Marketplace only (Open VSX refuses a version twice):
+  #   gh workflow run publish.yml -f tag=v0.4.4 -f marketplace_only=true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish, for example v0.4.4'
+        required: true
+      marketplace_only:
+        description: 'Skip Open VSX (the tag is already there)'
+        type: boolean
+        default: true
 
 jobs:
   publish:
@@ -12,16 +23,20 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Tag must match package.json version
         run: |
           v=$(node -p "require('./package.json').version")
-          test "v$v" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match package.json version $v"; exit 1; }
+          tag="${{ inputs.tag || github.ref_name }}"
+          test "v$v" = "$tag" || { echo "Tag $tag does not match package.json version $v"; exit 1; }
       - run: npm test
       - run: npx --yes @vscode/vsce package
       - name: Publish to Open VSX
+        if: ${{ !inputs.marketplace_only }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: npx --yes ovsx publish ./*.vsix -p "$OVSX_PAT"
