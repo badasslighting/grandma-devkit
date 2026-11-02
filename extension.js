@@ -39,8 +39,16 @@ const isPathInside = (baseDir, targetPath) => {
 
 const LUA = { language: 'lua' };
 const cfg = () => vscode.workspace.getConfiguration('ma3');
-const pluginsFolder = () => cfg().get('pluginsPath') || defaultPluginsPath();
-const ma2PluginsFolder = () => cfg().get('ma2.pluginsPath') || defaultMa2PluginsPath();
+// Settings that choose where files are written, or that trigger writes automatically, are honoured only
+// from the user's own settings (or the default). Values from a workspace (.vscode/settings.json,
+// *.code-workspace, folder settings) are ignored, since an untrusted workspace could otherwise redirect
+// deployment to an arbitrary directory or enable deploy-on-save.
+const userSetting = (key) => {
+  const info = cfg().inspect(key);
+  return info && info.globalValue !== undefined ? info.globalValue : info && info.defaultValue;
+};
+const pluginsFolder = () => userSetting('pluginsPath') || defaultPluginsPath();
+const ma2PluginsFolder = () => userSetting('ma2.pluginsPath') || defaultMa2PluginsPath();
 const bridgeDirFor = (target) => (target === 'ma2' ? cfg().get('ma2.bridgeDir') || defaultBridgeDirMa2() : cfg().get('bridge.dir') || defaultBridgeDir());
 
 // Which console a Lua document targets (lib/target.js has the order of the signals): the ma3.target
@@ -605,7 +613,7 @@ function activate(context) {
       deployFile(file, false);
     }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (cfg().get('deployOnSave') && /\.(lua|xml)$/i.test(doc.fileName)) {
+      if (userSetting('deployOnSave') && /\.(lua|xml)$/i.test(doc.fileName)) {
         try {
           if (findManifest(doc.fileName)) deployFile(doc.fileName, true);
         } catch (_) {
