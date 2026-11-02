@@ -25,13 +25,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Tag must match package.json version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           v=$(node -p "require('./package.json').version")
-          tag="${{ inputs.tag || github.ref_name }}"
+          tag="$TAG"
           test "v$v" = "$tag" || { echo "Tag $tag does not match package.json version $v"; exit 1; }
       - run: npm test
       - run: npx --yes @vscode/vsce package
