@@ -921,9 +921,16 @@ function activate(context) {
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
   const telnetOut = vscode.window.createOutputChannel('grandMA Console');
   context.subscriptions.push(telnetOut);
+  // The Telnet destination receives the stored console password, so it may only come from the user's own
+  // settings (or the built-in default). Values supplied by a workspace (.vscode/settings.json,
+  // *.code-workspace, folder settings) are ignored, since an untrusted workspace could redirect the login.
+  const userOnlySetting = (key) => {
+    const info = cfg().inspect(key);
+    return info && info.globalValue !== undefined ? info.globalValue : info && info.defaultValue;
+  };
   const telnetOptions = async () => ({
-    host: cfg().get('telnet.host'),
-    port: cfg().get('telnet.port'),
+    host: userOnlySetting('telnet.host'),
+    port: userOnlySetting('telnet.port'),
     user: cfg().get('telnet.user'),
     password: (await context.secrets.get('ma3.telnet.password')) || '',
     gapMs: cfg().get('telnet.gapMs'),
@@ -1016,7 +1023,7 @@ function activate(context) {
           backlog.length = 0;
         }, 900);
         monitor = await listen({
-          host: cfg().get('telnet.host'),
+          host: userOnlySetting('telnet.host'),
           port: cfg().get('telnet.monitorPort'),
           onLine: (l) => (live ? telnetOut.appendLine(`[monitor] ${l}`) : backlog.push(l)),
           onClose: () => {
@@ -1024,7 +1031,7 @@ function activate(context) {
             monitor = null;
           },
         });
-        telnetOut.appendLine(`[monitor] listening on ${cfg().get('telnet.host')}:${cfg().get('telnet.monitorPort')} (System Monitor: Lua runtime errors and console messages)`);
+        telnetOut.appendLine(`[monitor] listening on ${userOnlySetting('telnet.host')}:${cfg().get('telnet.monitorPort')} (System Monitor: Lua runtime errors and console messages)`);
       } catch (err) {
         telnetOut.appendLine(`[monitor] ${err.message}`);
         vscode.window.showErrorMessage(`Monitor failed: ${err.message}`);
