@@ -38,7 +38,7 @@ jobs:
             echo "Release reference must be a version tag such as v1.2.3"; exit 1
           fi
       # Only a tag is accepted: a branch of the same name does not resolve under refs/tags/.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
@@ -50,7 +50,7 @@ jobs:
           git merge-base --is-ancestor HEAD "refs/remotes/origin/$DEFAULT_BRANCH" || {
             echo "Tagged commit is not reachable from $DEFAULT_BRANCH; refusing to publish"; exit 1
           }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: Tag must match package.json version
