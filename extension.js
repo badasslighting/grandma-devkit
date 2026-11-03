@@ -952,6 +952,7 @@ function activate(context) {
   const telnetOptions = async () => ({
     host: userOnlySetting('telnet.host'),
     port: userOnlySetting('telnet.port'),
+    allowInsecureRemote: userOnlySetting('telnet.allowInsecureRemote') === true,
     user: cfg().get('telnet.user'),
     password: (await context.secrets.get('ma3.telnet.password')) || '',
     gapMs: cfg().get('telnet.gapMs'),
@@ -1045,6 +1046,7 @@ function activate(context) {
         }, 900);
         monitor = await listen({
           host: userOnlySetting('telnet.host'),
+          allowInsecureRemote: userOnlySetting('telnet.allowInsecureRemote') === true,
           port: cfg().get('telnet.monitorPort'),
           onLine: (l) => (live ? telnetOut.appendLine(`[monitor] ${l}`) : backlog.push(l)),
           onClose: () => {
