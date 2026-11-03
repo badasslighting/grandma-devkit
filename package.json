@@ -151,6 +151,12 @@
           "default": "127.0.0.1",
           "description": "Host of the console's Telnet command line (grandMA2). Telnet (the remote command line) must be enabled on the console."
         },
+        "ma3.telnet.allowInsecureRemote": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "markdownDescription": "Allow Telnet to a host other than this machine (loopback). **Telnet is unencrypted and unauthenticated**: the console password and every command are sent in cleartext and can be captured or tampered with by anyone on the network path. Enable only on a trusted, isolated network. Read from user settings only."
+        },
         "ma3.telnet.port": {
           "type": "number",
           "default": 30000,
