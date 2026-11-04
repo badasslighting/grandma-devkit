@@ -21,7 +21,7 @@ jobs:
     env:
       # Release tooling is pinned to exact versions so that a newly published (possibly compromised) npm release
       # cannot execute in this credentialed job. Bump deliberately and review the changelog when updating.
-      VSCE_VERSION: 3.7.1
+      VSCE_VERSION: 4.1.0 # 4.x is needed for publish --oidc (Trusted Publishing)
       OVSX_VERSION: 0.10.5
     permissions:
       contents: read
