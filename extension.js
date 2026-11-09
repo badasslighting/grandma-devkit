@@ -567,20 +567,49 @@ function activate(context) {
   );
   // ---- frame budget CodeLens (static); ma3.profileFunction is the hook for the live profiler (not built yet)
   const lensChanged = new vscode.EventEmitter();
+  const profiles = new Map();
+  const { buildProfileLua, parseProfile, formatProfile, lensTitle } = require('./lib/profiler');
   context.subscriptions.push(
     lensChanged,
     vscode.languages.registerCodeLensProvider(LUA, {
       onDidChangeCodeLenses: lensChanged.event,
       provideCodeLenses(doc) {
         if (!cfg().get('codelens.frameBudget')) return [];
-        return require('./lib/frameBudget').lenses(doc.getText()).map(
-          (l) => new vscode.CodeLens(new vscode.Range(l.line, 0, l.line, 0), { title: l.title, command: 'ma3.profileFunction', arguments: [{ uri: doc.uri, name: l.name, line: l.line }] })
-        );
+        const measured = profiles.get(doc.uri.toString());
+        return require('./lib/frameBudget').lenses(doc.getText()).map((l) => {
+          // A function the console called during the last profile shows the measured time next to the static count.
+          const f = measured && measured.profile.functions.find((x) => x.kind !== 'file' && x.line === l.line + 1);
+          const title = f ? lensTitle(f, { name: l.name, heavy: l.heavy, budgetMs: cfg().get('profiler.budgetMs') }) : l.title;
+          return new vscode.CodeLens(new vscode.Range(l.line, 0, l.line, 0), { title, command: 'ma3.profileFunction', arguments: [{ uri: doc.uri, name: l.name, line: l.line }] });
+        });
       },
     }),
-    vscode.commands.registerCommand('ma3.profileFunction', () =>
-      vscode.window.showInformationMessage('Frame budget: this is the static estimate. Live profiling on the console is not available yet.')
-    )
+    // Run the active file on the console under the profiler: Timer and HookObjectChange callbacks are timed and
+    // sampled for ma3.profiler.seconds, then the numbers replace the static estimate on the CodeLens.
+    vscode.commands.registerCommand('ma3.profileFunction', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== 'lua') return vscode.window.showWarningMessage('Open the Lua file to profile.');
+      if (targetOf(editor.document) !== 'ma3') return vscode.window.showWarningMessage('Live profiling needs grandMA3 (Timer and HookObjectChange). The CodeLens shows the static estimate.');
+      const dir = bridgeDirFor('ma3');
+      if (!dir || !bridge.status(dir).running) return vscode.window.showWarningMessage('Start the LuaBridge on the console to profile.');
+      const secs = Math.min(30, Math.max(1, Number(cfg().get('profiler.seconds')) || 3));
+      const budgetMs = cfg().get('profiler.budgetMs') || 16;
+      const code = buildProfileLua(editor.document.getText(), { durationS: secs });
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Profiling on the console for ${secs} s...` }, async () => {
+        try {
+          const r = await bridge.run(dir, code, Math.max(cfg().get('bridge.timeout') || 0, (secs + 15) * 1000));
+          if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
+          const profile = parseProfile(r.returns);
+          profiles.set(editor.document.uri.toString(), { profile });
+          lensChanged.fire();
+          output.show(true);
+          output.appendLine(`> profile ${path.basename(editor.document.fileName)} (${secs} s window, ${budgetMs} ms budget)`);
+          output.appendLine(formatProfile(profile, { budgetMs, durationS: secs }));
+        } catch (err) {
+          vscode.window.showErrorMessage(`Profile failed: ${err.message}`);
+        }
+      });
+    })
   );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {

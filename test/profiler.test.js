@@ -131,3 +131,9 @@ test('real Lua: a syntax error is reported, not thrown', { skip: !haveLua && 'no
   assert.match(r.profile.error, /profiled:/);
   assert.ok(r.coHookRestored && r.globalsKept);
 });
+
+test('static lenses carry the heavy-call count the measured CodeLens title reuses', () => {
+  const { lenses } = require('../lib/frameBudget');
+  const out = lenses('local function tick() ObjectList("x") end\nTimer(tick, 0.1, 1)\n');
+  assert.ok(out.length && out.every((l) => Number.isInteger(l.heavy)));
+});

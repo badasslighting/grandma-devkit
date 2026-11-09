@@ -42,6 +42,7 @@
       { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA" },
       { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA" },
       { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA" },
+      { "command": "ma3.profileFunction", "title": "Profile on the Console", "category": "grandMA" },
       { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA", "icon": "$(refresh)" },
       { "command": "ma3.objects.switch", "title": "Switch Object Browser Between grandMA3 and grandMA2", "category": "grandMA", "icon": "$(arrow-swap)" },
       { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA" },
@@ -295,6 +296,18 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Hint when a `Timer`, `HookObjectChange` or `gma.timer` callback reaches a heavy call (`ObjectList`, `:Children()`, `CmdIndirectWait`, `FindRecursive`, `Dump`) through local functions it calls. The hint names the chain."
+        },
+        "ma3.profiler.seconds": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 30,
+          "markdownDescription": "How long to record Timer and HookObjectChange callbacks when profiling a grandMA3 Lua file on the console (grandMA: Profile on the Console)."
+        },
+        "ma3.profiler.budgetMs": {
+          "type": "number",
+          "default": 16,
+          "markdownDescription": "Frame budget in milliseconds that measured callbacks are compared against."
         },
         "ma3.codelens.frameBudget": {
           "type": "boolean",
