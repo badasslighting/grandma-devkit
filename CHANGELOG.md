@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.6
+
+- **grandMA: Open Dialog Designer** (grandMA3 MessageBox, stage A): design a dialog or a menu flow of linked dialogs. Edit title, message, buttons, text inputs, switches and selectors with a live preview, and link each button to the next dialog. Problems show as you type (duplicate button values, links to missing dialogs, unreachable dialogs, repeated names). Insert at cursor or copy the Lua (one MessageBox call, or one function per dialog that branches on the button pressed), import literal MessageBox({...}) calls from the open file or selection, and show the dialog on a connected grandMA3 console.
+- **grandMA: Open Overlay Designer** (stage B): lay out a grandMA3 UI visually and get the Lua. Two modes, both written the way shipping plugins do it: a window (BaseInput with TitleBar, CloseButton and a UILayoutGrid of cells, nested grids, buttons with click handlers, fixed or shared row and column sizes) or free screen objects (Button and AppearancePreview with X, Y, W, H appended to a display's ScreenOverlay, with a close function). Click to select, drag to move and resize in screen mode, problems as you type (names, cells outside the grid, overlaps, handlers). Insert, copy, import back a design the designer wrote (it is saved inside the code), and show it on a connected grandMA3 console (screen designs come down again after 8 seconds).
+
 ## 0.4.5
 
 - Command grammar hints: Cmd() strings are checked against the grandMA2 / grandMA3 command grammar (unknown keywords, the other console's keywords, unknown `/options`, a stray `Thru`) (`ma3.lint.commandGrammar`).

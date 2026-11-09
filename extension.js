@@ -1127,6 +1127,141 @@ function activate(context) {
     })
   );
 
+  // ---- dialog / menu flow designer (stage A): MessageBox dialogs linked by their buttons, with Lua out and import in
+  let dialogPanel = null;
+  let lastTextEditor = vscode.window.activeTextEditor;
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((e) => { if (e) lastTextEditor = e; }));
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.dialogDesigner.open', () => {
+      if (dialogPanel) return dialogPanel.reveal();
+      const dm = require('./lib/dialogModel');
+      const { dialogHtml } = require('./lib/dialogPanel');
+      const panel = vscode.window.createWebviewPanel('ma3.dialogDesigner', 'grandMA Dialog Designer', vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
+      dialogPanel = panel;
+      panel.onDidDispose(() => (dialogPanel = null), null, context.subscriptions);
+      panel.webview.html = dialogHtml(require('crypto').randomBytes(16).toString('hex'));
+      const post = (m) => panel.webview.postMessage(m);
+      const targetEditor = () => {
+        const e = vscode.window.activeTextEditor || lastTextEditor;
+        return e && !e.document.isClosed ? e : null;
+      };
+      const asFlow = (f) => (f && Array.isArray(f.dialogs) && f.dialogs.length <= dm.MAX_DIALOGS ? f : null);
+      panel.webview.onDidReceiveMessage(async (m) => {
+        if (!m || typeof m.cmd !== 'string') return;
+        if (m.cmd === 'ready') return post({ type: 'load', flow: dm.newFlow(), note: '' });
+        const flow = asFlow(m.flow);
+        if (!flow) return;
+        const problems = dm.validate(flow);
+        const lua = dm.hasErrors(problems) ? '-- Fix the errors listed under Problems to get code.' : dm.generate(flow);
+        if (m.cmd === 'change') return post({ type: 'result', lua, problems });
+        if (m.cmd === 'copy') {
+          if (dm.hasErrors(problems)) return post({ type: 'note', note: 'Fix the errors first.' });
+          await vscode.env.clipboard.writeText(lua);
+          return post({ type: 'note', note: 'Copied.' });
+        }
+        if (m.cmd === 'insert') {
+          if (dm.hasErrors(problems)) return post({ type: 'note', note: 'Fix the errors first.' });
+          const editor = targetEditor();
+          if (!editor) return vscode.window.showWarningMessage('Open a Lua file to insert into.');
+          await editor.edit((b) => b.replace(editor.selection, lua));
+          return post({ type: 'note', note: 'Inserted.' });
+        }
+        if (m.cmd === 'import') {
+          const editor = targetEditor();
+          if (!editor) return vscode.window.showWarningMessage('Open a Lua file to import from.');
+          const text = editor.selection.isEmpty ? editor.document.getText() : editor.document.getText(editor.selection);
+          const { flow: found, skipped } = dm.importMessageBoxes(text);
+          if (!found.dialogs.length) return post({ type: 'note', note: skipped ? `${skipped} MessageBox call(s) use variables and cannot be imported.` : 'No MessageBox({...}) call found.' });
+          return post({ type: 'load', flow: found, note: `Imported ${found.dialogs.length} dialog(s)${skipped ? `, ${skipped} skipped (they use variables)` : ''}. Buttons are not linked yet.` });
+        }
+        if (m.cmd === 'preview') {
+          if (dm.hasErrors(problems)) return post({ type: 'note', note: 'Fix the errors first.' });
+          post({ type: 'note', note: 'Showing on the console... answer the dialog there.' });
+          try {
+            const r = await bridge.run(bridgeDirFor('ma3'), lua, 120000);
+            post({ type: 'note', note: r.ok ? 'The dialog was closed on the console.' : `Console: ${String(r.error).split('\n')[0]}` });
+          } catch (err) {
+            post({ type: 'note', note: `Console not reachable: ${err.message}` });
+          }
+        }
+      });
+    })
+  );
+
+  // ---- overlay designer (stage B): a window (title bar + grid) or free screen objects on a grandMA3 screen overlay
+  let overlayPanel = null;
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.overlayDesigner.open', () => {
+      if (overlayPanel) return overlayPanel.reveal();
+      const om = require('./lib/overlayModel');
+      const { overlayHtml } = require('./lib/overlayPanel');
+      const panel = vscode.window.createWebviewPanel('ma3.overlayDesigner', 'grandMA Overlay Designer', vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
+      overlayPanel = panel;
+      panel.onDidDispose(() => (overlayPanel = null), null, context.subscriptions);
+      panel.webview.html = overlayHtml(require('crypto').randomBytes(16).toString('hex'));
+      const post = (m) => panel.webview.postMessage(m);
+      const targetEditor = () => {
+        const e = vscode.window.activeTextEditor || lastTextEditor;
+        return e && !e.document.isClosed ? e : null;
+      };
+      // The page is our own, but a design is still checked for shape and size before the model reads it.
+      const asOverlay = (d) => {
+        if (!d || (d.mode !== 'window' && d.mode !== 'screen') || !Array.isArray(d.items)) return null;
+        let count = 0, deep = 0;
+        const scan = (items, depth) => {
+          deep = Math.max(deep, depth);
+          for (const it of items) {
+            if (!it || typeof it !== 'object' || ++count > om.MAX_ITEMS + 1) return false;
+            if (it.type === 'grid' && (!Array.isArray(it.items) || depth >= om.MAX_DEPTH + 1 || !scan(it.items, depth + 1))) return false;
+          }
+          return true;
+        };
+        return scan(d.items, 1) ? d : null;
+      };
+      panel.webview.onDidReceiveMessage(async (m) => {
+        if (!m || typeof m.cmd !== 'string') return;
+        if (m.cmd === 'ready') return post({ type: 'load', overlay: om.newOverlay(), note: '' });
+        if (m.cmd === 'mode') return post({ type: 'load', overlay: om.newOverlay(m.mode === 'screen' ? 'screen' : 'window'), note: 'New design.' });
+        if (m.cmd === 'import') {
+          const editor = targetEditor();
+          if (!editor) return vscode.window.showWarningMessage('Open a Lua file to import from.');
+          const found = om.importDesign(editor.document.getText());
+          return found ? post({ type: 'load', overlay: found, note: 'Imported the design saved in this file.' }) : post({ type: 'note', note: 'This file has no design saved by the designer.' });
+        }
+        const overlay = asOverlay(m.overlay);
+        if (!overlay) return;
+        const problems = om.validate(overlay);
+        const bad = om.hasErrors(problems);
+        const lua = bad ? '-- Fix the errors listed under Problems to get code.' : om.generate(overlay);
+        if (m.cmd === 'change') return post({ type: 'result', lua, problems, rects: om.layoutRects(overlay) });
+        if (bad) return post({ type: 'note', note: 'Fix the errors first.' });
+        if (m.cmd === 'copy') {
+          await vscode.env.clipboard.writeText(lua);
+          return post({ type: 'note', note: 'Copied.' });
+        }
+        if (m.cmd === 'insert') {
+          const editor = targetEditor();
+          if (!editor) return vscode.window.showWarningMessage('Open a Lua file to insert into.');
+          await editor.edit((b) => b.replace(editor.selection, lua));
+          return post({ type: 'note', note: 'Inserted.' });
+        }
+        if (m.cmd === 'preview') {
+          // Run the design on the console with a throw-away signal table: it looks right but its buttons do nothing.
+          // A screen overlay has no close button, so it is taken down again after 8 seconds.
+          const screen = overlay.mode === 'screen';
+          const run = `local chunk = load(${om.luaStr(lua)}, "design", "t", _ENV)\nlocal open, close = chunk("Preview", nil, {}, nil)\nopen()\n${screen ? 'Timer(function() close() end, 8, 1)\n' : ''}`;
+          post({ type: 'note', note: screen ? 'Showing on the console for 8 seconds...' : 'Showing on the console; close it with its X button.' });
+          try {
+            const r = await bridge.run(bridgeDirFor('ma3'), run, cfg().get('bridge.timeout'));
+            if (!r.ok) post({ type: 'note', note: `Console: ${String(r.error).split('\n')[0]}` });
+          } catch (err) {
+            post({ type: 'note', note: `Console not reachable: ${err.message}` });
+          }
+        }
+      });
+    })
+  );
+
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
   const telnetOut = vscode.window.createOutputChannel('grandMA Console');
   context.subscriptions.push(telnetOut);
