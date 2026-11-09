@@ -47,6 +47,8 @@
       { "command": "ma3.objects.showProperties", "title": "Show Properties", "category": "grandMA" },
       { "command": "ma3.objects.copyAddress", "title": "Copy Address", "category": "grandMA" },
       { "command": "ma3.objects.insertPath", "title": "Insert Lua Path at Cursor", "category": "grandMA" },
+      { "command": "ma3.objects.search", "title": "Search Object Tree", "category": "grandMA", "icon": "$(search)" },
+      { "command": "ma3.objects.insertCreate", "title": "Insert Creation Command", "category": "grandMA" },
       { "command": "ma3.telnet.send", "title": "Send Command to Console (Telnet)", "category": "grandMA" },
       { "command": "ma3.telnet.sendSelection", "title": "Send Selected Lines to Console as Commands (Telnet)", "category": "grandMA" },
       { "command": "ma3.runLuaTests", "title": "Run Lua Tests in This File on Console", "category": "grandMA" },
@@ -99,6 +101,7 @@
     "menus": {
       "view/title": [
         { "command": "ma3.objects.switch", "when": "view == ma3.objects", "group": "navigation@1" },
+        { "command": "ma3.objects.search", "when": "view == ma3.objects", "group": "navigation@0" },
         { "command": "ma3.objects.refresh", "when": "view == ma3.objects", "group": "navigation@2" },
         { "command": "ma3.vars.refresh", "when": "view == ma3.vars", "group": "navigation@1" },
         { "command": "ma3.vars.add", "when": "view == ma3.vars", "group": "navigation@2" },

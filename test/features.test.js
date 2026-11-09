@@ -116,3 +116,40 @@ test('live names: contexts, guards and parsers', () => {
   assert.ok(!l.attributeContext(sc('Cmd("Go+ Di')));
   assert.ok(!l.attributeContext(sc('Printf("Attribute Di')));
 });
+
+test('grandMA3 completion offers every documented keyword with its manual page; grandMA2 is unchanged', () => {
+  const { suggestKeywords } = require('../lib/cmdContext');
+  const ma3 = suggestKeywords('Store ', 'ma3'), ma2 = suggestKeywords('Store ', 'ma2');
+  assert.ok(ma3.length > ma2.length + 100);
+  const kw = ma3.find((k) => k.name === 'Interface' || k.name === 'KeyRegistry' || k.kind === 'keyword');
+  assert.ok(kw && /\[Manual page\]\(https:\/\/help\.malighting\.com\//.test(ma3.find((k) => k.kind === 'keyword').doc));
+  assert.equal(new Set(ma3.map((k) => k.name.toLowerCase())).size, ma3.length, 'no duplicate names');
+});
+test('keywords.json: every keyword has a manual page and most a description', () => {
+  const k = require('../data/keywords.json');
+  assert.ok(k.length >= 350);
+  assert.ok(k.every((x) => /^https:\/\/help\.malighting\.com\/grandMA3\/2\.5\/HTML\/keyword_/.test(x.url)));
+  assert.ok(k.filter((x) => x.doc).length > 350);
+  assert.equal(require('../lib/keywords').keywordInfo('go').name, 'Go+');
+});
+
+test('object tree extras: command forms and creation commands by Lua path, searchable offline', () => {
+  const ni = require('../lib/nodeIndex');
+  assert.ok(ni.forms('Root()[4]').some((k) => k.form === 'KeyRegistry 4' && k.documented === false));
+  const md = ni.nodeMarkdown('Root()[14][24][1]');
+  assert.match(md, /Create one/);
+  assert.match(md, /Store Root 14\.24\.1 \/nc/);
+  assert.equal(ni.nodeMarkdown('Root()[1][1][1][1][1][1]'), '');
+  const hit = ni.searchNodes('keyregistry 4');
+  assert.ok(hit.length && hit.some((n) => n.lua === 'Root()[4]'));
+  assert.ok(ni.searchNodes('usbdevicestorage').some((n) => n.addr === 'Root 9.3.1'));
+  assert.deepEqual(ni.searchNodes(''), []);
+  assert.ok(ni.flatNodes().length > 1400);
+});
+test('enum value lists on hover are whole up to a cap, then say how many more', () => {
+  const p = require('../lib/props');
+  const curves = p.enumValuesList('PredefinedPhaserStepCurves');
+  assert.ok(curves.includes('Swing (5)') && curves.length === 7);
+  const big = Object.keys(require('../data/props.json').ma3.enums).find((n) => p.enumValues(n).length > 64);
+  if (big) assert.match(p.enumValuesList(big).slice(-1)[0], /^\.\.\. and \d+ more$/);
+});

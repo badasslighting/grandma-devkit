@@ -24,3 +24,10 @@ test('factory references include attributes, gels, hardkeys and colors without s
  const refs=require('../data/object-trees/ma3_references.json');assert.ok(refs.attributes.some(x=>x.name==='P3'));assert.ok(refs.gels.some(x=>x.name==='White'));assert.ok(refs.hardkeys.length>1000);assert.ok(refs.colors.some(x=>x.name==='Disabled'));
  for(const file of ['ma3_tree.json','ma3_props.json','ma3_references.json'])assert.doesNotMatch(fs.readFileSync(path.join(base,file),'utf8'),/[A-Z]:[\\/]Users[\\/]/i,file);
 });
+test('the object tree can be browsed offline from the bundled data, for both consoles',()=>{
+ const {offlineChildren}=require('../lib/offlineTree');
+ const top=offlineChildren('ma3',[]);assert.ok(top.some(x=>x.cls==='ShowData'&&x.lua==='Root()[14]'));
+ const usb=offlineChildren('ma3',[9,3]);assert.deepEqual(usb.map(x=>x.cls),['USBDeviceStorage']);assert.equal(usb[0].addr,'Root 9.3.1');
+ assert.ok(offlineChildren('ma2',[]).length>10);assert.deepEqual(offlineChildren('ma3',[9999]),[]);
+ const p=require('../lib/props');assert.ok(p.ma3Props('USBDeviceStorage').some(x=>x.name==='MOUNTPOINT'));assert.ok(p.enumValues('PredefinedPhaserStepCurves').some(x=>x.name==='Swing'));
+});

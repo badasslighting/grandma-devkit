@@ -137,7 +137,9 @@ test('hover: If-family keywords and MA2 conditions inside a command string only'
   const line = 'gma.cmd("Select Fixture 1 If Output")';
   const at = line.indexOf('If');
   assert.match(commandHover(line, at + 1, 'ma3').markdown, /Filter/);
-  assert.strictEqual(commandHover(line, line.indexOf('Fixture'), 'ma3'), null);
+  assert.match(commandHover(line, line.indexOf('Fixture'), 'ma3').markdown, /Manual page/);
+  assert.strictEqual(commandHover(line, line.indexOf('Fixture'), 'ma2'), null);
+  assert.strictEqual(commandHover('gma.cmd("Select Zzzz 1")', 16, 'ma3'), null);
   assert.strictEqual(commandHover('local If = 1', 2, 'ma3'), null);
   const cond = 'gma.cmd("[$myvar==5] Off")';
   assert.match(commandHover(cond, cond.indexOf('myvar'), 'ma2').markdown, /Condition/);
