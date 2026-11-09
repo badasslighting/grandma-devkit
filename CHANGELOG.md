@@ -9,6 +9,7 @@
 - The grandMA2 property data covers 61 more console classes and 109 more value lists, each written to a grandMA2 onPC 3.9 console and read back. The 63 lists known to be whole (read off the console's dropdown, or walked by index to the console's end-of-list marker, such as DMX In Merge, sheet Readout and arrangement Axis) are shown as complete; the rest are marked "e.g.".
 - Tests for grouped `&&` / `||` conditions, `[$x]` with no operator and `]` inside quotes.
 - Workspace scans cache plugin manifests per folder.
+- The object tree view works without a console: when the LuaBridge isn't running it browses the bundled grandMA3 and grandMA2 trees (one sample per class path) and the header says "offline".
 
 ## 0.4.3
 

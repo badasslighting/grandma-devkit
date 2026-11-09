@@ -25,6 +25,7 @@ const { macroKind } = require('./lib/macroFiles');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
+const { offlineChildren } = require('./lib/offlineTree');
 const props = require('./lib/props');
 const enums = require('./lib/enums');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
@@ -835,6 +836,7 @@ function activate(context) {
         try {
           const r = await bridge.run(bridgeDirFor('ma2'), ma2TreeLua(path), cfg().get('bridge.timeout'));
           if (!r.ok) throw new Error(String(r.error).split(String.fromCharCode(10))[0]);
+          treeView.description = 'grandMA2';
           const { total, items } = parseMa2Tree(r.returns);
           const nodes = items.map((c) => {
             // Under the roots the index is the root number; below them a 0-based slot, and the pool number names the object.
@@ -853,12 +855,33 @@ function activate(context) {
           }
           return nodes;
         } catch (err) {
-          return [{ item: new vscode.TreeItem(`${err.message} (refresh to retry)`), path, error: true }];
+          return offlineNodes('ma2', path);
         }
       }
       try {
         const r = await bridge.run(bridgeDir(), listLua(path), cfg().get('bridge.timeout'));
         if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
+        treeView.description = 'grandMA3';
+
+  // No console bridge: browse the bundled tree instead (one sample per class path).
+  const offlineNodes = (target, path) => {
+    const rows = offlineChildren(target, path);
+    treeView.description = `${target === 'ma2' ? 'grandMA2' : 'grandMA3'} (offline: bundled data)`;
+    return rows.map((c) => {
+      const item = new vscode.TreeItem(c.name, c.count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+      item.description = c.cls === c.name ? c.addr : `${c.cls} ${c.addr}`.trim();
+      const sch = target === 'ma2' ? props.ma2Props(c.cls) : props.ma3Props(c.cls);
+      const where = target === 'ma2' ? c.addr : '`' + c.lua + '`';
+      item.tooltip = new vscode.MarkdownString(`${c.name}\n\n${where}\n\n${props.propsMarkdown(c.cls, sch, 25)}\n\n_Bundled data: start the LuaBridge for the live tree._`);
+      item.contextValue = 'ma3object';
+      const node = { item, path: path.concat(c.index), addr: c.addr, cls: c.cls, offline: true };
+      if (target === 'ma2') {
+        node.target = 'ma2';
+        node.parts = String(c.addr).split('.');
+      }
+      return node;
+    });
+  };
         const { total, items } = parseList(r.returns);
         const nodes = items.map((c) => {
           const item = new vscode.TreeItem(c.name, c.count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
@@ -876,7 +899,7 @@ function activate(context) {
         }
         return nodes;
       } catch (err) {
-        return [{ item: new vscode.TreeItem(`${err.message} (refresh to retry)`), path, error: true }];
+        return offlineNodes('ma3', path);
       }
     },
   };
