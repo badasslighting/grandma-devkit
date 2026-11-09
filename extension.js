@@ -26,6 +26,7 @@ const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
 const { offlineChildren } = require('./lib/offlineTree');
+const nodeIndex = require('./lib/nodeIndex');
 const props = require('./lib/props');
 const enums = require('./lib/enums');
 const { showLua, parseShow, showSuggestions } = require('./lib/showCache');
@@ -408,7 +409,7 @@ function activate(context) {
         const pa = targetOf(doc) === 'ma3' ? props.propAt(doc.lineAt(pos).text, pos.character) : null;
         const pinfo = pa && props.ma3Union().get(pa.name);
         if (pinfo) {
-          const vals = pinfo.enumName ? props.enumValues(pinfo.enumName).map((v) => `${v.name} (${v.value})`).slice(0, 24) : [];
+          const vals = pinfo.enumName ? props.enumValuesList(pinfo.enumName) : [];
           const md = new vscode.MarkdownString([`**${pinfo.name}** \`${pinfo.type}\`${pinfo.readOnly ? ', read-only' : ''}`, `Used by ${pinfo.classes} object class${pinfo.classes === 1 ? '' : 'es'}.`, vals.length ? `Values: ${vals.join(', ')}` : ''].filter(Boolean).join('\n\n'));
           return new vscode.Hover(md, new vscode.Range(pos.line, pa.start, pos.line, pa.end));
         }
@@ -824,6 +825,11 @@ function activate(context) {
   // ---- console object browser (tree of Root() through the bridge)
   const treeChanged = new vscode.EventEmitter();
   const luaPath = (p) => `Root()${p.map((i) => `[${i}]`).join('')}`;
+  // Verified command-line forms and creation commands for the object at this Lua path, as a Markdown block.
+  const extraMd = (lua) => {
+    const md = nodeIndex.nodeMarkdown(lua);
+    return md ? `\n\n${md}` : '';
+  };
   let treeTarget = 'ma3';
   let propsOut = null;
   const ma2Lua = (addr) => `gma.show.getobj.handle("${addr}")`;
@@ -871,7 +877,7 @@ function activate(context) {
       const item = new vscode.TreeItem(c.name, c.count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
       item.description = c.cls === c.name ? c.addr : `${c.cls} ${c.addr}`.trim();
       const sch = target === 'ma2' ? props.ma2Props(c.cls) : props.ma3Props(c.cls);
-      const where = target === 'ma2' ? c.addr : '`' + c.lua + '`';
+      const where = target === 'ma2' ? c.addr : '`' + c.lua + '`' + extraMd(c.lua);
       item.tooltip = new vscode.MarkdownString(`${c.name}\n\n${where}\n\n${props.propsMarkdown(c.cls, sch, 25)}\n\n_Bundled data: start the LuaBridge for the live tree._`);
       item.contextValue = 'ma3object';
       const node = { item, path: path.concat(c.index), addr: c.addr, cls: c.cls, offline: true };
@@ -887,7 +893,7 @@ function activate(context) {
           const item = new vscode.TreeItem(c.name, c.count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
           item.description = c.addr;
           const p3 = props.ma3Props(c.cls);
-          item.tooltip = new vscode.MarkdownString(`${c.name}\n\n\`${luaPath(path.concat(c.index))}\`\n\n${c.count} child${c.count === 1 ? '' : 'ren'}\n\n${props.propsMarkdown(c.cls, p3, 25)}`);
+          item.tooltip = new vscode.MarkdownString(`${c.name}\n\n\`${luaPath(path.concat(c.index))}\`\n\n${c.count} child${c.count === 1 ? '' : 'ren'}${extraMd(luaPath(path.concat(c.index)))}\n\n${props.propsMarkdown(c.cls, p3, 25)}`);
           item.contextValue = 'ma3object';
           return { item, path: path.concat(c.index), addr: c.addr, cls: c.cls };
         });
@@ -959,8 +965,57 @@ function activate(context) {
       const text = el.target === 'ma2' ? (el.addr ? ma2Lua(el.addr) : null) : luaPath(el.path);
       if (!text) return vscode.window.showWarningMessage('This object has no pool number, so it has no address.');
       await editor.edit((b) => b.insert(editor.selection.active, text));
+    }),
+    // Search the bundled grandMA3 tree by class, name, Lua path, address or command form (works without a console).
+    vscode.commands.registerCommand('ma3.objects.search', async () => {
+      const qp = vscode.window.createQuickPick();
+      qp.placeholder = 'Search the grandMA3 object tree: class, name, Lua path, address or command form';
+      qp.matchOnDescription = true;
+      qp.matchOnDetail = true;
+      const toItem = (n) => ({
+        label: n.label,
+        description: `${n.cls !== n.label ? `${n.cls}  ` : ''}${n.lua}${n.addr ? `  |  ${n.addr}` : ''}`,
+        detail: [n.forms.length ? `Command line: ${n.forms.join(', ')}` : '', n.creates.length ? `Create: ${n.creates.join(' ; ')}` : ''].filter(Boolean).join('   '),
+        node: n,
+        alwaysShow: true,
+      });
+      qp.onDidChangeValue((v) => {
+        qp.items = nodeIndex.searchNodes(v).slice(0, 150).map(toItem);
+      });
+      const picked = await new Promise((resolve) => {
+        qp.onDidAccept(() => resolve(qp.selectedItems[0] || null));
+        qp.onDidHide(() => resolve(null));
+        qp.show();
+      });
+      qp.dispose();
+      if (!picked) return;
+      const n = picked.node;
+      const actions = [
+        { label: 'Copy Lua path', run: () => vscode.env.clipboard.writeText(n.lua) },
+        { label: 'Insert Lua path at cursor', run: () => insertAtCursor(n.lua) },
+        ...(n.addr ? [{ label: `Copy address (${n.addr})`, run: () => vscode.env.clipboard.writeText(n.addr) }] : []),
+        ...n.forms.map((f) => ({ label: `Copy command form: ${f}`, run: () => vscode.env.clipboard.writeText(f) })),
+        ...n.creates.map((c) => ({ label: `Insert creation command: ${c}`, run: () => insertAtCursor(`Cmd("${c}")`) })),
+        { label: 'Show properties', run: () => vscode.commands.executeCommand('ma3.objects.showProperties', { path: (n.lua.match(/\[(\d+)\]/g) || []).map((x) => Number(x.slice(1, -1))), cls: n.cls }) },
+      ];
+      const act = await vscode.window.showQuickPick(actions, { placeHolder: `${n.label}: what next?` });
+      if (act) await act.run();
+    }),
+    // Insert a creation command (the exact Store or Set command that makes one of these objects) as a Cmd() call.
+    vscode.commands.registerCommand('ma3.objects.insertCreate', async () => {
+      const rows = nodeIndex.flatNodes().filter((n) => n.creates.length);
+      const pick = await vscode.window.showQuickPick(
+        rows.flatMap((n) => n.creates.map((c) => ({ label: n.label, description: c, detail: n.lua, cmd: c }))),
+        { placeHolder: 'Insert the command that creates one of these', matchOnDescription: true }
+      );
+      if (pick) await insertAtCursor(`Cmd("${pick.cmd}")`);
     })
   );
+  const insertAtCursor = async (text) => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return vscode.window.showWarningMessage('Open a file to insert into.');
+    await editor.edit((b) => b.insert(editor.selection.active, text));
+  };
 
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
   const telnetOut = vscode.window.createOutputChannel('grandMA Console');

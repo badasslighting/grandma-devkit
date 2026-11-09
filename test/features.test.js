@@ -132,3 +132,24 @@ test('keywords.json: every keyword has a manual page and most a description', ()
   assert.ok(k.filter((x) => x.doc).length > 350);
   assert.equal(require('../lib/keywords').keywordInfo('go').name, 'Go+');
 });
+
+test('object tree extras: command forms and creation commands by Lua path, searchable offline', () => {
+  const ni = require('../lib/nodeIndex');
+  assert.ok(ni.forms('Root()[4]').some((k) => k.form === 'KeyRegistry 4' && k.documented === false));
+  const md = ni.nodeMarkdown('Root()[14][24][1]');
+  assert.match(md, /Create one/);
+  assert.match(md, /Store Root 14\.24\.1 \/nc/);
+  assert.equal(ni.nodeMarkdown('Root()[1][1][1][1][1][1]'), '');
+  const hit = ni.searchNodes('keyregistry 4');
+  assert.ok(hit.length && hit.some((n) => n.lua === 'Root()[4]'));
+  assert.ok(ni.searchNodes('usbdevicestorage').some((n) => n.addr === 'Root 9.3.1'));
+  assert.deepEqual(ni.searchNodes(''), []);
+  assert.ok(ni.flatNodes().length > 1400);
+});
+test('enum value lists on hover are whole up to a cap, then say how many more', () => {
+  const p = require('../lib/props');
+  const curves = p.enumValuesList('PredefinedPhaserStepCurves');
+  assert.ok(curves.includes('Swing (5)') && curves.length === 7);
+  const big = Object.keys(require('../data/props.json').ma3.enums).find((n) => p.enumValues(n).length > 64);
+  if (big) assert.match(p.enumValuesList(big).slice(-1)[0], /^\.\.\. and \d+ more$/);
+});

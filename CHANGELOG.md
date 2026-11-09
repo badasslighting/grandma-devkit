@@ -10,6 +10,10 @@
 - Tests for grouped `&&` / `||` conditions, `[$x]` with no operator and `]` inside quotes.
 - Workspace scans cache plugin manifests per folder.
 - The object tree view works without a console: when the LuaBridge isn't running it browses the bundled grandMA3 and grandMA2 trees (one sample per class path) and the header says "offline".
+- grandMA3 command strings: hover any of the 358 documented keywords inside `Cmd("...")` for its description, shortcut and a link to its manual page, and complete them (after the common verbs, objects and modifiers).
+- Object tree tooltips list the verified command-line forms of an object (with a manual link, or marked undocumented) and the command that creates one.
+- New commands: grandMA: Search Object Tree (class, name, Lua path, address or command form, offline) with copy, insert and show-properties actions, and grandMA: Insert Creation Command.
+- Property hover lists a whole enum (up to 64 values, then how many more) instead of the first 24.
 
 ## 0.4.3
 
