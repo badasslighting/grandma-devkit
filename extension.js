@@ -1127,6 +1127,67 @@ function activate(context) {
     })
   );
 
+  // ---- dialog / menu flow designer (stage A): MessageBox dialogs linked by their buttons, with Lua out and import in
+  let dialogPanel = null;
+  let lastTextEditor = vscode.window.activeTextEditor;
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((e) => { if (e) lastTextEditor = e; }));
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.dialogDesigner.open', () => {
+      if (dialogPanel) return dialogPanel.reveal();
+      const dm = require('./lib/dialogModel');
+      const { dialogHtml } = require('./lib/dialogPanel');
+      const panel = vscode.window.createWebviewPanel('ma3.dialogDesigner', 'grandMA Dialog Designer', vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
+      dialogPanel = panel;
+      panel.onDidDispose(() => (dialogPanel = null), null, context.subscriptions);
+      panel.webview.html = dialogHtml(require('crypto').randomBytes(16).toString('hex'));
+      const post = (m) => panel.webview.postMessage(m);
+      const targetEditor = () => {
+        const e = vscode.window.activeTextEditor || lastTextEditor;
+        return e && !e.document.isClosed ? e : null;
+      };
+      const asFlow = (f) => (f && Array.isArray(f.dialogs) && f.dialogs.length <= dm.MAX_DIALOGS ? f : null);
+      panel.webview.onDidReceiveMessage(async (m) => {
+        if (!m || typeof m.cmd !== 'string') return;
+        if (m.cmd === 'ready') return post({ type: 'load', flow: dm.newFlow(), note: '' });
+        const flow = asFlow(m.flow);
+        if (!flow) return;
+        const problems = dm.validate(flow);
+        const lua = dm.hasErrors(problems) ? '-- Fix the errors listed under Problems to get code.' : dm.generate(flow);
+        if (m.cmd === 'change') return post({ type: 'result', lua, problems });
+        if (m.cmd === 'copy') {
+          if (dm.hasErrors(problems)) return post({ type: 'note', note: 'Fix the errors first.' });
+          await vscode.env.clipboard.writeText(lua);
+          return post({ type: 'note', note: 'Copied.' });
+        }
+        if (m.cmd === 'insert') {
+          if (dm.hasErrors(problems)) return post({ type: 'note', note: 'Fix the errors first.' });
+          const editor = targetEditor();
+          if (!editor) return vscode.window.showWarningMessage('Open a Lua file to insert into.');
+          await editor.edit((b) => b.replace(editor.selection, lua));
+          return post({ type: 'note', note: 'Inserted.' });
+        }
+        if (m.cmd === 'import') {
+          const editor = targetEditor();
+          if (!editor) return vscode.window.showWarningMessage('Open a Lua file to import from.');
+          const text = editor.selection.isEmpty ? editor.document.getText() : editor.document.getText(editor.selection);
+          const { flow: found, skipped } = dm.importMessageBoxes(text);
+          if (!found.dialogs.length) return post({ type: 'note', note: skipped ? `${skipped} MessageBox call(s) use variables and cannot be imported.` : 'No MessageBox({...}) call found.' });
+          return post({ type: 'load', flow: found, note: `Imported ${found.dialogs.length} dialog(s)${skipped ? `, ${skipped} skipped (they use variables)` : ''}. Buttons are not linked yet.` });
+        }
+        if (m.cmd === 'preview') {
+          if (dm.hasErrors(problems)) return post({ type: 'note', note: 'Fix the errors first.' });
+          post({ type: 'note', note: 'Showing on the console... answer the dialog there.' });
+          try {
+            const r = await bridge.run(bridgeDirFor('ma3'), lua, 120000);
+            post({ type: 'note', note: r.ok ? 'The dialog was closed on the console.' : `Console: ${String(r.error).split('\n')[0]}` });
+          } catch (err) {
+            post({ type: 'note', note: `Console not reachable: ${err.message}` });
+          }
+        }
+      });
+    })
+  );
+
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
   const telnetOut = vscode.window.createOutputChannel('grandMA Console');
   context.subscriptions.push(telnetOut);
