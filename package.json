@@ -43,6 +43,7 @@
       { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA" },
       { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA" },
       { "command": "ma3.profileFunction", "title": "Profile on the Console", "category": "grandMA" },
+      { "command": "ma3.repl.open", "title": "Open Console REPL and Inspector", "category": "grandMA" },
       { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA", "icon": "$(refresh)" },
       { "command": "ma3.objects.switch", "title": "Switch Object Browser Between grandMA3 and grandMA2", "category": "grandMA", "icon": "$(arrow-swap)" },
       { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA" },

@@ -1079,6 +1079,54 @@ function activate(context) {
     await editor.edit((b) => b.insert(editor.selection.active, text));
   };
 
+
+  // ---- console REPL and inspector: type Lua, expand the result as a tree, watch expressions (both consoles)
+  let replPanel = null;
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.repl.open', () => {
+      if (replPanel) return replPanel.reveal();
+      const { replLua, parseRepl } = require('./lib/repl');
+      const { replHtml, tidyExpr, rootIndexPath } = require('./lib/replPanel');
+      const panel = vscode.window.createWebviewPanel('ma3.repl', 'grandMA Console', vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
+      replPanel = panel;
+      panel.onDidDispose(() => (replPanel = null), null, context.subscriptions);
+      const nonce = require('crypto').randomBytes(16).toString('hex');
+      panel.webview.html = replHtml(nonce, activeTarget());
+      const evalOn = async (target, expr, mode) => {
+        const dir = bridgeDirFor(target === 'ma2' ? 'ma2' : 'ma3');
+        try {
+          const r = await bridge.run(dir, replLua(expr, mode), cfg().get('bridge.timeout'));
+          if (!r.ok) return { error: String(r.error).split('\n')[0] };
+          return parseRepl(r.returns);
+        } catch (err) {
+          return { error: err.message };
+        }
+      };
+      panel.webview.onDidReceiveMessage(async (m) => {
+        if (!m || typeof m.cmd !== 'string') return;
+        const expr = typeof m.expr === 'string' ? m.expr.slice(0, 4000) : '';
+        if (m.cmd === 'run') panel.webview.postMessage({ type: 'run', id: m.id, expr, reply: await evalOn(m.target, expr, 'run') });
+        else if (m.cmd === 'expand') panel.webview.postMessage({ type: 'children', id: m.id, reply: await evalOn(m.target, expr, 'children') });
+        else if (m.cmd === 'watch') {
+          const results = [];
+          for (const w of (Array.isArray(m.exprs) ? m.exprs : []).slice(0, 20)) results.push(await evalOn(m.target, String(w).slice(0, 4000), 'run'));
+          panel.webview.postMessage({ type: 'watch', results });
+        } else if (m.cmd === 'copy') {
+          await vscode.env.clipboard.writeText(tidyExpr(expr));
+          vscode.window.setStatusBarMessage(`Copied ${tidyExpr(expr)}`, 3000);
+        } else if (m.cmd === 'insert') {
+          const editor = vscode.window.activeTextEditor;
+          if (editor) await editor.edit((b) => b.insert(editor.selection.active, tidyExpr(expr)));
+          else vscode.window.showWarningMessage('Open a file to insert into.');
+        } else if (m.cmd === 'props') {
+          const path = rootIndexPath(expr);
+          if (path) vscode.commands.executeCommand('ma3.objects.showProperties', { path, cls: '' });
+          else vscode.window.showInformationMessage('Show Properties needs a Root()[n]... expression; this object came from another expression.');
+        }
+      });
+    })
+  );
+
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
   const telnetOut = vscode.window.createOutputChannel('grandMA Console');
   context.subscriptions.push(telnetOut);
