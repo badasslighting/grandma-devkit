@@ -10,3 +10,11 @@ test('the designer page substitutes the nonce everywhere and its script compiles
   const script = /<script nonce="abc123">([\s\S]*)<\/script>/.exec(html)[1];
   assert.doesNotThrow(() => new Function('acquireVsCodeApi', 'document', 'window', script));
 });
+
+test('the overlay designer page substitutes the nonce and its script compiles', () => {
+  const { overlayHtml } = require('../lib/overlayPanel');
+  const html = overlayHtml('zz9');
+  assert.ok(!html.includes('__NONCE__'));
+  const script = /<script nonce="zz9">([\s\S]*)<\/script>/.exec(html)[1];
+  assert.doesNotThrow(() => new Function('acquireVsCodeApi', 'document', 'window', script));
+});
