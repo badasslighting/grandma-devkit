@@ -103,7 +103,7 @@ test('ma2 lint: unknown gma function, no-argument call, gma.cmd in a loop; MA3 r
   const lint = (src) => lintRules(src, api, { target: 'ma2' }).map((f) => `${f.rule}@${f.line}`);
   assert.deepStrictEqual(lint('gma.feedbak("x")\ngma.feedback("ok")\ngma.network.getprimaryip()'), ['unknown-api@0']);
   assert.deepStrictEqual(lint('gma.cmd()\ngma.gettime()'), ['missing-args@0']);
-  assert.deepStrictEqual(lint('for i = 1, 3 do\n  gma.cmd("Go+")\nend\ngma.cmd("x")'), ['cmd-in-loop@1']);
+  assert.deepStrictEqual(lint('for i = 1, 3 do\n  gma.cmd("Go+")\nend\ngma.cmd("ClearAll")'), ['cmd-in-loop@1']);
   assert.deepStrictEqual(lint('printf("a")\nCmd()'), []);
   assert.deepStrictEqual(lintRules('gma.feedbak("x")', api, { target: 'ma3' }).map((f) => f.rule), []);
 });

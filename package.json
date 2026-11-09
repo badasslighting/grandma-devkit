@@ -2,7 +2,7 @@
   "name": "grandma-devkit",
   "displayName": "Devkit for Grand MA2+MA3",
   "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -19,6 +19,7 @@
     "test": "node --test \"test/*.test.js\"",
     "test:ui": "node test/ui/runTest.js",
     "build-api": "node scripts/build-api.js",
+    "build:grammar": "node scripts/build-grammar.js",
     "package": "npx @vscode/vsce package"
   },
   "contributes": {
@@ -41,6 +42,8 @@
       { "command": "ma3.importHelpLua", "title": "Import API from HelpLua File", "category": "grandMA" },
       { "command": "ma3.copyImportCommand", "title": "Copy Import Command for Plugin", "category": "grandMA" },
       { "command": "ma3.runOnConsole", "title": "Run File or Selection on Console", "category": "grandMA" },
+      { "command": "ma3.profileFunction", "title": "Profile on the Console", "category": "grandMA" },
+      { "command": "ma3.repl.open", "title": "Open Console REPL and Inspector", "category": "grandMA" },
       { "command": "ma3.objects.refresh", "title": "Refresh Object Browser", "category": "grandMA", "icon": "$(refresh)" },
       { "command": "ma3.objects.switch", "title": "Switch Object Browser Between grandMA3 and grandMA2", "category": "grandMA", "icon": "$(arrow-swap)" },
       { "command": "ma3.objects.copyPath", "title": "Copy Lua Path", "category": "grandMA" },
@@ -64,6 +67,8 @@
       { "command": "ma3.telnet.stopMonitor", "title": "Stop Console Monitor", "category": "grandMA" },
       { "command": "ma3.installBridge", "title": "Install LuaBridge on Console", "category": "grandMA" },
       { "command": "ma3.refreshShow", "title": "Refresh Show Objects for Completion", "category": "grandMA" },
+      { "command": "ma3.findObjectUsages", "title": "Find Usages of Console Object", "category": "grandMA" },
+      { "command": "ma3.findObjectUsagesAtCursor", "title": "Find Usages of Console Object at Cursor", "category": "grandMA" },
       { "command": "ma3.bridgeStatus", "title": "LuaBridge Status", "category": "grandMA" },
       { "command": "ma3.bridgeReset", "title": "LuaBridge: Clear Globals", "category": "grandMA" },
       { "command": "ma3.vars.replaceRange", "title": "Replace Variables Across a Range ($color1 thru $color5)", "category": "grandMA" },
@@ -137,7 +142,8 @@
         { "command": "ma3.vars.extract", "when": "(editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro) && editorHasSelection", "group": "ma3vars@3" },
         { "command": "ma3.vars.convert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@4" },
         { "command": "ma3.bank.insert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@5" },
-        { "command": "ma3.bank.favorite", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@6" }
+        { "command": "ma3.bank.favorite", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@6" },
+        { "command": "ma3.findObjectUsagesAtCursor", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro || editorLangId == xml", "group": "ma3@9" }
       ]
     },
     "configuration": {
@@ -276,6 +282,38 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Inside `Cmd(\"...\")` strings, complete group, sequence, macro, preset and similar numbers with the labels from the show running in onPC, through the LuaBridge plugin. The lookup takes a few milliseconds of console time, at most once a minute, and only while the bridge is running."
+        },
+        "ma3.lint.commandGrammar": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Check the console commands inside `Cmd(\"...\")` strings against the grandMA2 / grandMA3 command grammar: unknown keywords, keywords of the other console, unknown `/options`, a missing object, a stray `Thru` or an empty `At`. Findings are hints."
+        },
+        "ma3.lint.showRefs": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Hint when a `Cmd(\"...\")` string runs, selects or deletes a group, sequence, macro, preset or other pool object that is not in the show last read from the console through the LuaBridge (see `ma3.liveCompletion`). Commands that can create the object (Store, Copy, Label, Import...) and pools longer than the cached list are never checked."
+        },
+        "ma3.lint.frameBudget": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Hint when a `Timer`, `HookObjectChange` or `gma.timer` callback reaches a heavy call (`ObjectList`, `:Children()`, `CmdIndirectWait`, `FindRecursive`, `Dump`) through local functions it calls. The hint names the chain."
+        },
+        "ma3.profiler.seconds": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 30,
+          "markdownDescription": "How long to record Timer and HookObjectChange callbacks when profiling a grandMA3 Lua file on the console (grandMA: Profile on the Console)."
+        },
+        "ma3.profiler.budgetMs": {
+          "type": "number",
+          "default": 16,
+          "markdownDescription": "Frame budget in milliseconds that measured callbacks are compared against."
+        },
+        "ma3.codelens.frameBudget": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show a frame-budget line above each callback, signal handler and plugin function: the heavy calls it reaches (static estimate)."
         },
         "ma3.lint.globals": {
           "type": "boolean",

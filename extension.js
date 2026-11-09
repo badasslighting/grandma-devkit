@@ -21,7 +21,8 @@ const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus }
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget, detectTargetForFile } = require('./lib/target');
 const varFeatures = require('./lib/varFeatures');
-const { macroKind } = require('./lib/macroFiles');
+const { macroKind, toRaw } = require('./lib/macroFiles');
+const objectUsages = require('./lib/objectUsages');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
@@ -127,8 +128,11 @@ function activate(context) {
     cache.pending = bridge
       .run(dir, target === 'ma2' ? ma2ShowLua() : showLua(), cfg().get('bridge.timeout'))
       .then((r) => {
-        if (r.ok) Object.assign(cache, { at: Date.now(), data: parseShow(r.returns), pending: null });
-        else cache.pending = null;
+        if (r.ok) {
+          Object.assign(cache, { at: Date.now(), data: parseShow(r.returns), pending: null });
+          // show-aware hints (ma3.lint.showRefs) read the cache, so re-lint the Lua files for this console
+          vscode.workspace.textDocuments.filter((d) => d.languageId === 'lua' && targetOf(d) === target).forEach(refresh);
+        } else cache.pending = null;
         return cache.data;
       })
       .catch(() => {
@@ -481,7 +485,18 @@ function activate(context) {
       message: `Loop never yields, breaks or returns; it will freeze the console. Add ${target === 'ma2' ? 'gma.sleep(seconds)' : 'coroutine.yield(seconds)'} or use a timer.`,
       fix: { kind: 'yield', text: target === 'ma2' ? 'gma.sleep(0.1)' : 'coroutine.yield(0.1)' },
     }));
-    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), target }));
+    // show-aware hints use the cached show as it is (lintDoc stays synchronous); a stale or empty cache starts a
+    // fetch in the background, at most once per SHOW_TTL_MS, and getShow re-lints when the data arrives
+    let show = null;
+    if (cfg().get('lint.showRefs')) {
+      const cache = showCaches[target] || showCaches.ma3;
+      show = cache.data;
+      if (Date.now() - cache.at >= SHOW_TTL_MS && !cache.pending && Date.now() - (cache.lintTried || 0) >= SHOW_TTL_MS) {
+        cache.lintTried = Date.now();
+        getShow(false, target === 'ma2' ? 'ma2' : 'ma3');
+      }
+    }
+    return findings.concat(lintRules(text, index.api, { globals: cfg().get('lint.globals'), grammar: cfg().get('lint.commandGrammar'), frameBudget: cfg().get('lint.frameBudget'), target, show }));
   }
   const findingRange = (doc, f) =>
     f.len ? new vscode.Range(f.line, f.col, f.line, f.col + f.len) : doc.lineAt(Math.min(f.line, doc.lineCount - 1)).range;
@@ -550,9 +565,56 @@ function activate(context) {
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
     )
   );
+  // ---- frame budget CodeLens (static); ma3.profileFunction is the hook for the live profiler (not built yet)
+  const lensChanged = new vscode.EventEmitter();
+  const profiles = new Map();
+  const { buildProfileLua, parseProfile, formatProfile, lensTitle } = require('./lib/profiler');
+  context.subscriptions.push(
+    lensChanged,
+    vscode.languages.registerCodeLensProvider(LUA, {
+      onDidChangeCodeLenses: lensChanged.event,
+      provideCodeLenses(doc) {
+        if (!cfg().get('codelens.frameBudget')) return [];
+        const measured = profiles.get(doc.uri.toString());
+        return require('./lib/frameBudget').lenses(doc.getText()).map((l) => {
+          // A function the console called during the last profile shows the measured time next to the static count.
+          const f = measured && measured.profile.functions.find((x) => x.kind !== 'file' && x.line === l.line + 1);
+          const title = f ? lensTitle(f, { name: l.name, heavy: l.heavy, budgetMs: cfg().get('profiler.budgetMs') }) : l.title;
+          return new vscode.CodeLens(new vscode.Range(l.line, 0, l.line, 0), { title, command: 'ma3.profileFunction', arguments: [{ uri: doc.uri, name: l.name, line: l.line }] });
+        });
+      },
+    }),
+    // Run the active file on the console under the profiler: Timer and HookObjectChange callbacks are timed and
+    // sampled for ma3.profiler.seconds, then the numbers replace the static estimate on the CodeLens.
+    vscode.commands.registerCommand('ma3.profileFunction', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== 'lua') return vscode.window.showWarningMessage('Open the Lua file to profile.');
+      if (targetOf(editor.document) !== 'ma3') return vscode.window.showWarningMessage('Live profiling needs grandMA3 (Timer and HookObjectChange). The CodeLens shows the static estimate.');
+      const dir = bridgeDirFor('ma3');
+      if (!dir || !bridge.status(dir).running) return vscode.window.showWarningMessage('Start the LuaBridge on the console to profile.');
+      const secs = Math.min(30, Math.max(1, Number(cfg().get('profiler.seconds')) || 3));
+      const budgetMs = cfg().get('profiler.budgetMs') || 16;
+      const code = buildProfileLua(editor.document.getText(), { durationS: secs });
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Profiling on the console for ${secs} s...` }, async () => {
+        try {
+          const r = await bridge.run(dir, code, Math.max(cfg().get('bridge.timeout') || 0, (secs + 15) * 1000));
+          if (!r.ok) throw new Error(String(r.error).split('\n')[0]);
+          const profile = parseProfile(r.returns);
+          profiles.set(editor.document.uri.toString(), { profile });
+          lensChanged.fire();
+          output.show(true);
+          output.appendLine(`> profile ${path.basename(editor.document.fileName)} (${secs} s window, ${budgetMs} ms budget)`);
+          output.appendLine(formatProfile(profile, { budgetMs, durationS: secs }));
+        } catch (err) {
+          vscode.window.showErrorMessage(`Profile failed: ${err.message}`);
+        }
+      });
+    })
+  );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('ma3')) vscode.workspace.textDocuments.forEach(refresh);
+      if (e.affectsConfiguration('ma3.codelens')) lensChanged.fire();
     })
   );
   vscode.workspace.textDocuments.forEach(refresh);
@@ -1017,6 +1079,54 @@ function activate(context) {
     await editor.edit((b) => b.insert(editor.selection.active, text));
   };
 
+
+  // ---- console REPL and inspector: type Lua, expand the result as a tree, watch expressions (both consoles)
+  let replPanel = null;
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ma3.repl.open', () => {
+      if (replPanel) return replPanel.reveal();
+      const { replLua, parseRepl } = require('./lib/repl');
+      const { replHtml, tidyExpr, rootIndexPath } = require('./lib/replPanel');
+      const panel = vscode.window.createWebviewPanel('ma3.repl', 'grandMA Console', vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
+      replPanel = panel;
+      panel.onDidDispose(() => (replPanel = null), null, context.subscriptions);
+      const nonce = require('crypto').randomBytes(16).toString('hex');
+      panel.webview.html = replHtml(nonce, activeTarget());
+      const evalOn = async (target, expr, mode) => {
+        const dir = bridgeDirFor(target === 'ma2' ? 'ma2' : 'ma3');
+        try {
+          const r = await bridge.run(dir, replLua(expr, mode), cfg().get('bridge.timeout'));
+          if (!r.ok) return { error: String(r.error).split('\n')[0] };
+          return parseRepl(r.returns);
+        } catch (err) {
+          return { error: err.message };
+        }
+      };
+      panel.webview.onDidReceiveMessage(async (m) => {
+        if (!m || typeof m.cmd !== 'string') return;
+        const expr = typeof m.expr === 'string' ? m.expr.slice(0, 4000) : '';
+        if (m.cmd === 'run') panel.webview.postMessage({ type: 'run', id: m.id, expr, reply: await evalOn(m.target, expr, 'run') });
+        else if (m.cmd === 'expand') panel.webview.postMessage({ type: 'children', id: m.id, reply: await evalOn(m.target, expr, 'children') });
+        else if (m.cmd === 'watch') {
+          const results = [];
+          for (const w of (Array.isArray(m.exprs) ? m.exprs : []).slice(0, 20)) results.push(await evalOn(m.target, String(w).slice(0, 4000), 'run'));
+          panel.webview.postMessage({ type: 'watch', results });
+        } else if (m.cmd === 'copy') {
+          await vscode.env.clipboard.writeText(tidyExpr(expr));
+          vscode.window.setStatusBarMessage(`Copied ${tidyExpr(expr)}`, 3000);
+        } else if (m.cmd === 'insert') {
+          const editor = vscode.window.activeTextEditor;
+          if (editor) await editor.edit((b) => b.insert(editor.selection.active, tidyExpr(expr)));
+          else vscode.window.showWarningMessage('Open a file to insert into.');
+        } else if (m.cmd === 'props') {
+          const path = rootIndexPath(expr);
+          if (path) vscode.commands.executeCommand('ma3.objects.showProperties', { path, cls: '' });
+          else vscode.window.showInformationMessage('Show Properties needs a Root()[n]... expression; this object came from another expression.');
+        }
+      });
+    })
+  );
+
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
   const telnetOut = vscode.window.createOutputChannel('grandMA Console');
   context.subscriptions.push(telnetOut);
@@ -1460,6 +1570,56 @@ function activate(context) {
     onChange: () => vscode.workspace.textDocuments.forEach(refresh),
   });
   vscode.workspace.textDocuments.forEach(refresh);
+
+  // ---- Find Usages of Console Object: where Macro 12 / Preset 2.5 is named across the workspace (lib/objectUsages.js),
+  // over the variable index's files, plus what the cached show holds under that number (no bridge call).
+  let usageIndex = null;
+  const editorTarget = () => {
+    const ed = vscode.window.activeTextEditor;
+    const k = ed && macroKind(ed.document.fileName, ed.document.getText());
+    return k ? k.target : activeTarget();
+  };
+  async function showUsages(kind, no) {
+    const obj = objectUsages.parseObject(kind, no);
+    if (!obj) return vscode.window.showWarningMessage(`Not a console object: ${[kind, no].filter(Boolean).join(' ')}`);
+    usageIndex = objectUsages.buildObjectIndex(
+      vars.entries().map((e) => ({ file: e.file, text: e.text, target: e.scan.target })),
+      usageIndex
+    );
+    const usages = objectUsages.findUsages(usageIndex, obj.kind, obj.no);
+    const qp = vscode.window.createQuickPick();
+    qp.title = objectUsages.showLine(showCaches[editorTarget()].data, obj.kind, obj.no) || undefined;
+    qp.placeholder = `${usages.length} usage${usages.length === 1 ? '' : 's'} of ${obj.kind} ${obj.no}`;
+    qp.matchOnDescription = true;
+    qp.items = usages.map((u) => ({ label: `${vscode.workspace.asRelativePath(u.file)}:${u.line + 1}`, description: u.text, usage: u }));
+    qp.onDidAccept(async () => {
+      const u = qp.selectedItems[0] && qp.selectedItems[0].usage;
+      qp.hide();
+      if (u) await vscode.window.showTextDocument(vscode.Uri.file(u.file), { selection: new vscode.Range(u.line, u.col, u.line, u.col + u.len) });
+    });
+    qp.onDidHide(() => qp.dispose());
+    qp.show();
+    return usages;
+  }
+  context.subscriptions.push(
+    // args {kind, no} (or {no: 'Preset 2.5'}) skip the prompts; the usages are returned for scripts
+    vscode.commands.registerCommand('ma3.findObjectUsages', async (args) => {
+      if (args && args.no !== undefined) return showUsages(args.kind, args.no);
+      const kind = await vscode.window.showQuickPick(objectUsages.KINDS, { placeHolder: 'Console object kind' });
+      if (!kind) return;
+      const no = await vscode.window.showInputBox({ prompt: `${kind} number`, placeHolder: kind === 'Preset' ? '2.5' : '12', validateInput: (v) => (objectUsages.parseObject(kind, v) ? null : kind === 'Preset' ? 'type.number, e.g. 2.5' : 'a number') });
+      if (no) return showUsages(kind, no);
+    }),
+    vscode.commands.registerCommand('ma3.findObjectUsagesAtCursor', async () => {
+      const ed = vscode.window.activeTextEditor;
+      const cmd = ed && vars.commandAt(ed.document, ed.selection.active);
+      const offset = ed && ed.document.offsetAt(ed.selection.active);
+      const abs = cmd && (cmd.segment ? (a) => toRaw(cmd.segment, a, 0).start : (a) => cmd.offset + a);
+      const ref = cmd && objectUsages.refAt(cmd.text, cmd.target || targetOf(ed.document), offset, abs, { dynamic: cmd.dynamic });
+      if (!ref) return vscode.window.showInformationMessage('Put the cursor on a console object reference (such as Macro 12) in a command string or macro line.');
+      return showUsages(ref.kind, ref.no);
+    })
+  );
 
   // Replaces the API list (saved so it survives restarts), and re-checks every open file against it.
   function applyApi(api) {

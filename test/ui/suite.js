@@ -66,6 +66,11 @@ test('0.3 commands are registered', async () => {
   for (const c of ['ma3.deployAndRun', 'ma3.packagePlugin', 'ma3.refreshShow', 'ma3.objects.refresh', 'ma3.objects.copyPath']) assert.ok(cmds.includes(c), `${c} registered`);
 });
 
+test('0.4.5 commands are registered', async () => {
+  const cmds = await vscode.commands.getCommands(true);
+  for (const c of ['ma3.findObjectUsages', 'ma3.findObjectUsagesAtCursor']) assert.ok(cmds.includes(c), `${c} registered`);
+});
+
 // The test makes its own group, so it does not depend on what the running show holds: slot 999 must be free,
 // the group is deleted in a finally, and the slot is checked empty again afterwards.
 const TEMP_GROUP = 999;

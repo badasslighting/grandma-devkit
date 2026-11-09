@@ -1,0 +1,22 @@
+{
+ "note": "Hand-maintained corrections merged into data/grammar.json by scripts/build-grammar.js. The raw manual harvests next to this file are never edited. Every entry says why.",
+ "ma2": {
+  "aliases": {
+   "cd": { "target": "ChangeDest", "why": "CD is the real short form of ChangeDestination; the MA2 page is titled ChangeDest and its CD syntax lines are not picked up as an alias." }
+  },
+  "options": {
+   "Import": { "add": ["file", "path"], "why": "/File \"x.xml\" and /Path \"...\" are accepted by the console and used in real plugins; the manual's Import page lists only /noconfirm /quiet /path." }
+  }
+ },
+ "ma3": {
+  "aliases": {
+   "cd": { "target": "ChangeDestination", "why": "CD is the real short form of ChangeDestination on grandMA3; the manual only spells the long form." }
+  },
+  "options": {
+   "Import": { "add": ["file", "path"], "why": "/File \"x.xml\" and /Path \"...\" work on the console (Import Plugin 3 /File \"X.xml\" /Path \"C:/...\"); the manual's Import page does not list /File." }
+  }
+ },
+ "unknownKeywordIgnorePrefixes": [
+  { "prefix": "_", "why": "Underscore-prefixed commands are internal/debug commands (_DebugSpeedMultiplier) that no manual page documents." }
+ ]
+}
