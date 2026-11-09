@@ -5,6 +5,8 @@
 // Output is deterministic: keys and lists are sorted, nothing depends on time or file order.
 //   node scripts/build-grammar.js
 
+const reEsc = (t) => String(t).replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&');
+
 const fs = require('fs');
 const path = require('path');
 
@@ -60,12 +62,12 @@ function fromSyntax(name, lines, raw) {
   // The manual describes a default object or the selected executor: the bare verb is valid.
   const prose = `${raw.description || ''} ${raw.notes || ''}`;
   if (takesObject && /\bif no\b|\bdefault\b|\bselected\b|\bwithout\b/i.test(prose)) takesObject = false;
-  if (takesObject && (raw.examples || []).some((e) => new RegExp(`>\\s*${low.replace(/[+-]/g, '\\$&')}\\s*(?:/.*)?$`, 'i').test(e.trim()))) takesObject = false;
+  if (takesObject && (raw.examples || []).some((e) => new RegExp(`>\\s*${reEsc(low)}\\s*(?:/.*)?$`, 'i').test(e.trim()))) takesObject = false;
   return {
     takesObject,
     takesName: lines.length ? /"[^"]*"|\bname\b/i.test(text) : null,
     takesNumber: lines.length ? /\b(?:number|id|value|index)\b|\[\d|_Number/i.test(text) : null,
-    rangeable: lines.length || raw.examples ? /-list\]|object list|\bthru\b/i.test(text) || (raw.examples || []).some((e) => new RegExp(`\\b${low.replace(/[+-]/g, '\\$&')}\\b.*\\bthru\\b`, 'i').test(e)) : null,
+    rangeable: lines.length || raw.examples ? /-list\]|object list|\bthru\b/i.test(text) || (raw.examples || []).some((e) => new RegExp(`\\b${reEsc(low)}\\b.*\\bthru\\b`, 'i').test(e)) : null,
   };
 }
 
@@ -126,7 +128,7 @@ function build(file, consoleId) {
     const syn = isWord ? fromSyntax(name, lines, { ...k, alias }) : { takesObject: null, takesName: null, takesNumber: null, rangeable: null };
     let kind = k.kind || null;
     if (!kind && isWord && lines.length) {
-      if (lines.some((l) => new RegExp(`^\\(?\\[Function\\]\\)?\\s+${name.replace(/[+-]/g, '\\$&')}\\b`, 'i').test(l))) kind = 'object';
+      if (lines.some((l) => new RegExp(`^\\(?\\[Function\\]\\)?\\s+${reEsc(name)}\\b`, 'i').test(l))) kind = 'object';
       else if (syn.takesObject !== null || lines.every((l) => l.toLowerCase().startsWith(key))) kind = 'verb';
     }
     if (!isWord) kind = 'operator';
