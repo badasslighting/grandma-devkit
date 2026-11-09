@@ -228,10 +228,10 @@ function activate(context) {
             }
             const partial = (/[^\s]*$/.exec(str.text) || [''])[0];
             const range = new vscode.Range(pos.line, pos.character - partial.length, pos.line, pos.character);
-            const items = suggestKeywords(str.text).map((k) => {
+            const items = suggestKeywords(str.text, cmdTarget).map((k) => {
               const item = new vscode.CompletionItem(k.name, k.kind === 'modifier' ? vscode.CompletionItemKind.Operator : vscode.CompletionItemKind.Keyword);
               item.detail = k.kind;
-              item.documentation = k.doc;
+              item.documentation = k.markdown ? new vscode.MarkdownString(k.doc) : k.doc;
               item.range = range;
               item.sortText = `${k.rank}${k.name}`;
               return item;

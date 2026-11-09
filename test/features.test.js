@@ -116,3 +116,19 @@ test('live names: contexts, guards and parsers', () => {
   assert.ok(!l.attributeContext(sc('Cmd("Go+ Di')));
   assert.ok(!l.attributeContext(sc('Printf("Attribute Di')));
 });
+
+test('grandMA3 completion offers every documented keyword with its manual page; grandMA2 is unchanged', () => {
+  const { suggestKeywords } = require('../lib/cmdContext');
+  const ma3 = suggestKeywords('Store ', 'ma3'), ma2 = suggestKeywords('Store ', 'ma2');
+  assert.ok(ma3.length > ma2.length + 100);
+  const kw = ma3.find((k) => k.name === 'Interface' || k.name === 'KeyRegistry' || k.kind === 'keyword');
+  assert.ok(kw && /\[Manual page\]\(https:\/\/help\.malighting\.com\//.test(ma3.find((k) => k.kind === 'keyword').doc));
+  assert.equal(new Set(ma3.map((k) => k.name.toLowerCase())).size, ma3.length, 'no duplicate names');
+});
+test('keywords.json: every keyword has a manual page and most a description', () => {
+  const k = require('../data/keywords.json');
+  assert.ok(k.length >= 350);
+  assert.ok(k.every((x) => /^https:\/\/help\.malighting\.com\/grandMA3\/2\.5\/HTML\/keyword_/.test(x.url)));
+  assert.ok(k.filter((x) => x.doc).length > 350);
+  assert.equal(require('../lib/keywords').keywordInfo('go').name, 'Go+');
+});
