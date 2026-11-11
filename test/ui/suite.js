@@ -548,6 +548,15 @@ test('ease of use: Connect, Get Started and Variables commands exist, the walkth
   assert.strictEqual(vscode.workspace.getConfiguration('ma3').get('vars.enabled'), true);
 });
 
+test('ease of use: the ma3.console context follows the active file (grandMA3, grandMA2, none)', async () => {
+  await openLua('ctx3.lua', 'Printf("hi")\nCmd("Go+ Executor 1")');
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma3' ? 1 : 0), 'ma3 context for a grandMA3 file');
+  await openLua('ctx2.lua', 'gma.echo("hi")\ngma.cmd("Go+ Executor 1")');
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma2' ? 1 : 0), 'ma2 context for a grandMA2 file');
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === '' ? 1 : 0), 'empty context with no file');
+});
+
 testMa3('LuaBridge Status reports the live heartbeat', async () => {
   await openLua('st3.lua', 'return 1'); // a grandMA3 file, so Status checks the grandMA3 bridge
   popups.length = 0;
