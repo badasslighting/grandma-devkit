@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.9
+
+- **Marketplace icon**: the MA Lighting logo on a solid white 512 px square (no transparency, no checkerboard), proportions kept. 0.4.8 replaced it with the BLT logo by mistake.
+
 ## 0.4.8
 
 - **grandMA2 address completion**: inside `gma.show.getobj.handle("Root 3.")` (either quote), the child numbers and names under the address typed so far complete from the console, one level at a time (needs LuaBridge_MA2). With no console they complete from the bundled grandMA2 tree instead, marked "(bundled sample)": one sample per class path, so a pool lists only what was sampled.
