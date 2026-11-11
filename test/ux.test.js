@@ -87,3 +87,10 @@ test('palette: how many commands each context lists (hidden-by-rule commands rem
   assert.ok(ma3 < everyone.size && ma2 < everyone.size && ma3 < none && ma2 < none, `ma3 ${ma3}, ma2 ${ma2}, none ${none}, all ${everyone.size}`);
   console.log(`palette lists: grandMA3 file ${ma3}, grandMA2 file ${ma2}, no file ${none}, of ${everyone.size} commands`);
 });
+
+test('hot reload: ma3.deployOnSave.reload is off by default and sits next to deployOnSave', () => {
+  const props = contrib.configuration.properties;
+  assert.strictEqual(props['ma3.deployOnSave.reload'].default, false);
+  const keys = Object.keys(props);
+  assert.strictEqual(keys.indexOf('ma3.deployOnSave.reload'), keys.indexOf('ma3.deployOnSave') + 1);
+});

@@ -16,7 +16,7 @@ const { pathContext, childrenLua, parseChildren } = require('./lib/objectPath');
 const { buildRunLua, parseResults, discoverTests, errorLine } = require('./lib/luaTests');
 const { listRemovableDrives, planExport, exportToStick } = require('./lib/usb');
 const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = require('./lib/liveApi');
-const { ma2TreeLua, parseMa2Tree, ma2Address, ma2ShowLua } = require('./lib/ma2Objects');
+const { ma2TreeLua, parseMa2Tree, ma2Address, ma2ShowLua, ma2PathContext, ma2PathEntries } = require('./lib/ma2Objects');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget, detectTargetForFile } = require('./lib/target');
@@ -270,6 +270,33 @@ function activate(context) {
             return enums.enumMembers(en.name, await liveFetch(`enum:${en.name}`, enumMembersLua(en.name), parseMembers)).map((m) => {
               const item = new vscode.CompletionItem(m.name, vscode.CompletionItemKind.EnumMember);
               item.detail = `Enums.${en.name}.${m.name} = ${m.value}`;
+              return item;
+            });
+          }
+          const mp = targetOf(doc) === 'ma2' ? ma2PathContext(before) : null;
+          if (mp) {
+            // gma.show.getobj.handle("Root 3.2.|": the numbers and names under that address, from the console.
+            let lua;
+            try {
+              lua = ma2TreeLua(mp.numbers, 300, true);
+            } catch (_) {
+              return [];
+            }
+            const target = 'ma2';
+            const dir = bridgeDirFor(target);
+            if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return [];
+            let parsed;
+            try {
+              const r = await bridge.run(dir, lua, cfg().get('bridge.timeout'));
+              parsed = r.ok ? parseMa2Tree(r.returns) : { items: [] };
+            } catch (_) {
+              return [];
+            }
+            return ma2PathEntries(parsed).map((e) => {
+              const item = new vscode.CompletionItem(e.number, vscode.CompletionItemKind.Module);
+              item.detail = [e.cls, e.name].filter(Boolean).join(' ');
+              item.sortText = e.number.padStart(6, '0');
+              item.commitCharacters = ['.'];
               return item;
             });
           }
@@ -626,6 +653,33 @@ function activate(context) {
   );
 
   // ---- deploy
+  // Re-imports a deployed plugin into its pool slot and starts it (the reload half of Deploy and Reload on Console).
+  async function reloadOnConsole(manifest, slot) {
+      output.show(true);
+      const ma2 = manifestIsMa2(manifest);
+      const name = path.basename(manifest, path.extname(manifest));
+      // grandMA2 can also be driven over Telnet, which works when the bridge isn't running.
+      const via = cfg().get('deployAndRun.via');
+      if (ma2 && (via === 'telnet' || (via === 'auto' && !bridge.status(bridgeDirFor('ma2')).running))) {
+        output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot} (grandMA2, Telnet)`);
+        warnCollisions(ma2PluginsFolder(), name);
+        return sendLines(reloadCommands('ma2', name, slot));
+      }
+      if (!ma2 && (via === 'osc' || (via === 'auto' && !bridge.status(bridgeDirFor('ma3')).running))) {
+        output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot} (grandMA3, OSC)`);
+        return sendOsc(reloadCommands('ma3', name, slot));
+      }
+      output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}${ma2 ? ' (grandMA2)' : ''}`);
+      try {
+        const code = ma2 ? reloadLuaMa2(name, slot) : reloadLua(name, slot);
+        const r = await bridge.run(bridgeDirFor(ma2 ? 'ma2' : 'ma3'), code, cfg().get('bridge.timeout'));
+        output.appendLine(bridge.formatResult(r));
+      } catch (err) {
+        output.appendLine(`bridge error: ${err.message}`);
+        vscode.window.showErrorMessage(`Reload failed: ${err.message}`);
+      }
+  }
+
   function deployFile(file, quiet) {
     try {
       const manifest = findManifest(file);
@@ -650,29 +704,7 @@ function activate(context) {
       if (!manifest) return;
       const slot = cfg().get('deployAndRun.slot');
       if (!slot) return vscode.window.showInformationMessage('Deployed. Set ma3.deployAndRun.slot to also re-import and start the plugin on the console.');
-      output.show(true);
-      const ma2 = manifestIsMa2(manifest);
-      const name = path.basename(manifest, path.extname(manifest));
-      // grandMA2 can also be driven over Telnet, which works when the bridge isn't running.
-      const via = cfg().get('deployAndRun.via');
-      if (ma2 && (via === 'telnet' || (via === 'auto' && !bridge.status(bridgeDirFor('ma2')).running))) {
-        output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot} (grandMA2, Telnet)`);
-        warnCollisions(ma2PluginsFolder(), name);
-        return sendLines(reloadCommands('ma2', name, slot));
-      }
-      if (!ma2 && (via === 'osc' || (via === 'auto' && !bridge.status(bridgeDirFor('ma3')).running))) {
-        output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot} (grandMA3, OSC)`);
-        return sendOsc(reloadCommands('ma3', name, slot));
-      }
-      output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}${ma2 ? ' (grandMA2)' : ''}`);
-      try {
-        const code = ma2 ? reloadLuaMa2(name, slot) : reloadLua(name, slot);
-        const r = await bridge.run(bridgeDirFor(ma2 ? 'ma2' : 'ma3'), code, cfg().get('bridge.timeout'));
-        output.appendLine(bridge.formatResult(r));
-      } catch (err) {
-        output.appendLine(`bridge error: ${err.message}`);
-        vscode.window.showErrorMessage(`Reload failed: ${err.message}`);
-      }
+      return reloadOnConsole(manifest, slot);
     }),
     vscode.commands.registerCommand('ma3.deploy', (uri) => {
       const file = (uri && uri.fsPath) || (vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.fileName);
@@ -682,7 +714,13 @@ function activate(context) {
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (userSetting('deployOnSave') && /\.(lua|xml)$/i.test(doc.fileName)) {
         try {
-          if (findManifest(doc.fileName)) deployFile(doc.fileName, true);
+          const manifest = findManifest(doc.fileName) && deployFile(doc.fileName, true);
+          // Hot reload: with ma3.deployOnSave.reload on, a running LuaBridge and a pool slot, the saved plugin is re-imported and started.
+          const slot = cfg().get('deployAndRun.slot');
+          if (manifest && slot && userSetting('deployOnSave.reload')) {
+            const target = manifestIsMa2(manifest) ? 'ma2' : 'ma3';
+            if (bridge.status(bridgeDirFor(target)).running) reloadOnConsole(manifest, slot);
+          }
         } catch (_) {
           /* unrelated file */
         }

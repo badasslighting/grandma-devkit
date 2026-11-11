@@ -24,7 +24,7 @@ jobs:
       VSCE_VERSION: 4.1.0 # 4.x is needed for publish --oidc (Trusted Publishing)
       OVSX_VERSION: 0.10.5
     permissions:
-      contents: read
+      contents: write # creates the GitHub release and attaches the VSIX
       id-token: write
     # A manual run must itself be dispatched from the default branch (or a tag), so that the workflow definition
     # that holds the publication credentials is not taken from an arbitrary branch.
@@ -62,6 +62,20 @@ jobs:
           test "v$v" = "$tag" || { echo "Tag $tag does not match package.json version $v"; exit 1; }
       - run: npm test
       - run: npx --yes "@vscode/vsce@${VSCE_VERSION}" package
+      - name: GitHub release with the VSIX
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          # The release notes are this version's section of CHANGELOG.md. TAG was checked above to be a plain version tag.
+          v="${TAG#v}"
+          awk -v v="$v" '/^## /{p = ($2 == v)} p' CHANGELOG.md | sed '1d' > notes.md
+          [ -s notes.md ] || echo "grandMA Devkit $v" > notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" ./*.vsix --clobber
+          else
+            gh release create "$TAG" ./*.vsix --verify-tag --title "grandMA Devkit $v" --notes-file notes.md
+          fi
       - name: Publish to Open VSX
         if: ${{ !inputs.marketplace_only }}
         env:
