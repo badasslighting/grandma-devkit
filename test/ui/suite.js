@@ -371,15 +371,12 @@ tests.push({
   needs: () => up(bridgeLib.defaultBridgeDirMa2()),
   why: 'grandMA2 onPC LuaBridge_MA2 not running',
   fn: async () => {
-    const { doc } = await openLua('ma2path.lua', 'local h = gma.show.getobj.handle("Root ")
-local g = gma.show.getobj.handle("Root 2.")
-');
+    const { doc } = await openLua('ma2path.lua', 'local h = gma.show.getobj.handle("Root ")');
     const complete = (line, col) => vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(line, col));
     const roots = await complete(0, 'local h = gma.show.getobj.handle("Root '.length);
     assert.ok(roots.items.length > 0 && roots.items.every((i) => /^\d+$/.test(i.label)), `root numbers offered: ${roots.items.map((i) => i.label).join(',')}`);
     const first = roots.items[0].label;
-    const { doc: doc2 } = await openLua('ma2path2.lua', `local h = gma.show.getobj.handle("Root ${first}.")
-`);
+    const { doc: doc2 } = await openLua('ma2path2.lua', `local h = gma.show.getobj.handle("Root ${first}.")`);
     const kids = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc2.uri, new vscode.Position(0, `local h = gma.show.getobj.handle("Root ${first}.`.length));
     assert.ok(Array.isArray(kids.items), 'children request answers (a leaf root may offer none)');
     assert.ok(kids.items.every((i) => /^\d+$/.test(i.label)), 'children are offered by pool number');
