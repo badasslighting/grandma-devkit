@@ -163,7 +163,7 @@ test('property names and enum values complete inside Get/Set, and hover names th
 
 const propsOutput = () =>
   vscode.workspace.textDocuments
-    .filter((d) => d.uri.scheme === 'output' && /grandMA Properties/i.test(d.uri.path + d.uri.authority + d.uri.query))
+    .filter((d) => d.uri.scheme === 'output' && /grandMA Devkit/i.test(d.uri.path + d.uri.authority + d.uri.query))
     .map((d) => d.getText())
     .join('\n');
 
