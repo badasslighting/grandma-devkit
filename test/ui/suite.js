@@ -540,6 +540,14 @@ test('contributed settings have the declared defaults', async () => {
   assert.strictEqual(cfg.get('bridge.dir'), '');
 });
 
+test('ease of use: Connect, Get Started and Variables commands exist, the walkthrough is contributed, ma3.vars.enabled defaults on', async () => {
+  const cmds = await vscode.commands.getCommands(true);
+  for (const c of ['ma3.connect', 'ma3.getStarted', 'ma3.vars.menu']) assert.ok(cmds.includes(c), `${c} is registered`);
+  const ext = vscode.extensions.all.find((e) => e.packageJSON && e.packageJSON.name === 'grandma-devkit');
+  assert.ok(ext.packageJSON.contributes.walkthroughs.some((w) => w.id === 'ma3.getStarted'));
+  assert.strictEqual(vscode.workspace.getConfiguration('ma3').get('vars.enabled'), true);
+});
+
 testMa3('LuaBridge Status reports the live heartbeat', async () => {
   await openLua('st3.lua', 'return 1'); // a grandMA3 file, so Status checks the grandMA3 bridge
   popups.length = 0;
