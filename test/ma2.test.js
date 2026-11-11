@@ -84,7 +84,7 @@ test('ma2 deploy: newest gma2_V folder with a plugins directory, and the reload 
   assert.strictEqual(defaultMa2PluginsPath({ ProgramData: 'C:\\PD' }, 'win32', fsApi), path.join(root, 'gma2_V_3.9.61', 'plugins'));
   assert.strictEqual(defaultMa2PluginsPath({}, 'win32', fsApi), '');
   assert.strictEqual(defaultMa2PluginsPath({ ProgramData: 'C:\\PD' }, 'linux', fsApi), '');
-  assert.strictEqual(reloadLuaMa2('X"Y', 20), 'gma.cmd("Import \\"XY\\" At Plugin 20 /o /nc")\ngma.cmd("Plugin \\"XY\\"")\n');
+  assert.strictEqual(reloadLuaMa2('X"Y', 20), 'gma.cmd("Import \\"XY\\" At Plugin 20 /o /nc")\ngma.sleep(1)\ngma.cmd("Plugin 20")\n');
   assert.throws(() => reloadLuaMa2('x', 'a'), /number/);
   assert.match(defaultBridgeDirMa2({ ProgramData: 'C:\\PD' }, 'win32'), /MA2/);
   assert.strictEqual(defaultBridgeDirMa2({ MA2_LUABRIDGE_DIR: 'X' }, 'linux'), 'X');
@@ -130,8 +130,8 @@ test('importCollisions: only extra XML files that share the plugin name prefix c
 
 test('reloadCommands gives the right commands per console and refuses a bad slot or name tricks', () => {
   const { reloadCommands } = require('../lib/deploy');
-  assert.deepStrictEqual(reloadCommands('ma2', 'P', 5), ['Import "P" At Plugin 5 /o /nc', 'Plugin "P"']);
+  assert.deepStrictEqual(reloadCommands('ma2', 'P', 5), ['Import "P" At Plugin 5 /o /nc', 'Plugin 5']);
   assert.deepStrictEqual(reloadCommands('ma3', 'P', 5), ['Import Plugin Library "P" At Plugin 5 /nc', 'Call Plugin 5']);
-  assert.deepStrictEqual(reloadCommands('ma2', 'P"\nDelete Plugin 1', 5), ['Import "PDelete Plugin 1" At Plugin 5 /o /nc', 'Plugin "PDelete Plugin 1"']);
+  assert.deepStrictEqual(reloadCommands('ma2', 'P"\nDelete Plugin 1', 5), ['Import "PDelete Plugin 1" At Plugin 5 /o /nc', 'Plugin 5']);
   assert.throws(() => reloadCommands('ma2', 'P', '5; Delete'), /number/);
 });

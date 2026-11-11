@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.10
+
+- **Hot reload now works** (`ma3.deployOnSaveReload`, off by default): with deploy on save, a pool slot in `ma3.deployAndRun.slot` and the LuaBridge running, each save re-imports and starts the plugin on the console. In 0.4.8 the setting was named `ma3.deployOnSave.reload`, which VS Code could never read because `ma3.deployOnSave` is itself a setting; it is renamed. Tested live on grandMA2 onPC.
+- **grandMA2 Deploy and Reload on Console** now waits a second after the import and starts the plugin by its pool slot; started by name straight after the import, nothing ran. The reload also gets a longer time limit than the 2 s default.
+- **Completion with no console**: grandMA3 `Root().` paths complete from the bundled tree (children and properties, marked as a bundled sample), and `Cmd("... Macro ")` offers the numbers and names the project's own files already use (marked "used in this project").
+- **Run and Reload failures** offer a **Connect...** button that opens the connection menu.
+- The save hook shows an error in the **grandMA Devkit** panel instead of swallowing it.
+
 ## 0.4.9
 
 - **Marketplace icon**: the MA Lighting logo on a solid white 512 px square (no transparency, no checkerboard), proportions kept. 0.4.8 replaced it with the BLT logo by mistake.

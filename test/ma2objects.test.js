@@ -74,3 +74,15 @@ test('offlineAddressChildren lists the bundled grandMA2 tree by address, without
   assert.ok(kids.some((k) => k.number === '1' && /HISTORY/.test(k.cls)), 'children of Root 1');
   assert.deepStrictEqual(offlineAddressChildren([999]), [], 'unknown address');
 });
+
+test('offlineMa3Path completes a literal Root() path from the bundled grandMA3 tree', () => {
+  const { offlineMa3Path } = require('../lib/offlineTree');
+  const top = offlineMa3Path([]);
+  assert.ok(top.children.includes('ShowData') && top.children.includes('StationSettings'), 'top-level objects');
+  assert.deepStrictEqual(top.properties, [], 'Root itself has no class properties in the bundle');
+  const show = offlineMa3Path(['ShowData']);
+  assert.ok(show && show.children.length > 0, 'children of ShowData');
+  const t = offlineMa3Path([2, 1]);
+  assert.ok(t.properties.includes('DAYLIGHTSAVINGSTATE'), 'properties of Root()[2][1] (TimeConfig)');
+  assert.strictEqual(offlineMa3Path(['NoSuchThing']), null);
+});

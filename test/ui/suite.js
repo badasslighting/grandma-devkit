@@ -374,6 +374,80 @@ test('grandMA2: handle("Root ") completes root numbers from the bundled tree or 
   assert.ok(nums.length > 5, `root numbers offered: ${r.items.map((i) => i.label).slice(0, 12).join(',')}`);
 });
 
+// Hot reload on grandMA2 onPC: with deploy on save, reload on save and a pool slot, saving a plugin file
+// re-imports and runs it. Slot 98 must be free in the test show; everything created is removed afterwards.
+tests.push({
+  name: 'grandMA2: hot reload on save re-imports and runs the plugin (ma3.deployOnSaveReload)',
+  needs: () => up(bridgeLib.defaultBridgeDirMa2()),
+  why: 'grandMA2 onPC LuaBridge_MA2 not running',
+  fn: async () => {
+    const bridge = require('../../lib/bridge');
+    const { defaultMa2PluginsPath } = require('../../lib/deploy');
+    const dir = bridge.defaultBridgeDirMa2();
+    const run = (code) => bridge.run(dir, code, 8);
+    await until(() => up(dir), 'LuaBridge_MA2 to answer (an earlier test may have restarted it)', 30000);
+    const slot = 98;
+    const used = await run(`return gma.show.getobj.handle('Plugin ${slot}') and 'used' or 'free'`);
+    assert.match(String(used.returns[0]), /free/, `Plugin ${slot} must be free in the test show (found ${used.returns[0]})`);
+    const config = vscode.workspace.getConfiguration('ma3');
+    const set = (k, v) => config.update(k, v, vscode.ConfigurationTarget.Global);
+    await set('deployAndRun.slot', slot);
+    await set('deployOnSave', true);
+    await set('deployOnSaveReload', true);
+    // The data folder of the onPC that is running (the default picks the newest installed version, which may not be it).
+    let folder = defaultMa2PluginsPath();
+    try {
+      const exe = require('child_process').execFileSync('powershell', ['-NoProfile', '-Command', "(Get-Process gma2onpc -ErrorAction Stop | Select-Object -First 1).Path"], { encoding: 'utf8' });
+      const v = /onPC (\d+\.\d+\.\d+)/.exec(exe);
+      const mine = v && path.join(process.env.ProgramData, 'MA Lighting Technologies', 'grandma', `gma2_V_${v[1]}`, 'plugins');
+      if (mine && fs.existsSync(mine)) folder = mine;
+    } catch (_) {
+      /* keep the default */
+    }
+    await set('ma2.pluginsPath', folder);
+    const luaFor = (v) => `local function main()
+  gma.show.setvar('UI_HOT_RELOAD', '${v}')
+end
+return main
+`;
+    try {
+      await vscode.commands.executeCommand('ma3.newPluginMa2', 'UiHotMa2');
+      const luaFile = path.join(ws, 'UiHotMa2', 'UiHotMa2.lua');
+      for (const v of ['one', 'two']) {
+        // Edit through the editor that New Plugin opened (writing the file behind its back makes the save a conflict).
+        const doc = await vscode.workspace.openTextDocument(luaFile);
+        const editor = await vscode.window.showTextDocument(doc);
+        const whole = new vscode.Range(0, 0, doc.lineCount, 0);
+        const edited = await editor.edit((e) => e.replace(whole, luaFor(v)));
+        assert.ok(edited, 'the edit applied');
+        await vscode.commands.executeCommand('workbench.action.files.save');
+        await until(() => !doc.isDirty, 'the document to save', 8000);
+        await sleep(4000); // the bridge takes one request at a time: let the reload's requests finish before polling it
+        let last = '';
+        const seen = await until(async () => {
+          const r = await run("return tostring(gma.show.getvar('UI_HOT_RELOAD')) .. ' | plugin98=' .. tostring(gma.show.getobj.handle('Plugin 98') ~= nil)");
+          last = String(r.returns[0]);
+          return last.includes(v) ? v : '';
+        }, `the plugin to run after saving version ${v} (console says: ${last}; deployed files: ${fs.existsSync(folder) ? fs.readdirSync(folder).filter((f) => f.startsWith('UiHotMa2')).join(',') : 'no folder'})`, 15000).catch((err) => {
+          throw new Error(`${err.message.replace(/\(console says:[^)]*\)/, '')} [console says: ${last}; deployed: ${fs.readdirSync(folder).filter((f) => f.startsWith('UiHotMa2')).join(',')}]`);
+        });
+        assert.strictEqual(seen, v);
+      }
+    } finally {
+      await set('ma2.pluginsPath', undefined);
+      await set('deployOnSaveReload', undefined);
+      await set('deployOnSave', undefined);
+      await set('deployAndRun.slot', undefined);
+      try {
+        await run(`gma.cmd('Delete Plugin ${slot} /nc') gma.show.setvar('UI_HOT_RELOAD', '')`);
+      } catch (_) {
+        /* bridge gone */
+      }
+      for (const f of fs.existsSync(folder) ? fs.readdirSync(folder) : []) if (f.startsWith('UiHotMa2')) fs.rmSync(path.join(folder, f), { force: true });
+    }
+  },
+});
+
 tests.push({
   name: 'grandMA2: gma.show.getobj.handle("Root n.") completes the numbers and names under the address',
   needs: () => up(bridgeLib.defaultBridgeDirMa2()),

@@ -88,9 +88,30 @@ test('palette: how many commands each context lists (hidden-by-rule commands rem
   console.log(`palette lists: grandMA3 file ${ma3}, grandMA2 file ${ma2}, no file ${none}, of ${everyone.size} commands`);
 });
 
-test('hot reload: ma3.deployOnSave.reload is off by default and sits next to deployOnSave', () => {
+test('hot reload: ma3.deployOnSaveReload is off by default and sits next to deployOnSave', () => {
   const props = contrib.configuration.properties;
-  assert.strictEqual(props['ma3.deployOnSave.reload'].default, false);
+  assert.strictEqual(props['ma3.deployOnSaveReload'].default, false);
   const keys = Object.keys(props);
-  assert.strictEqual(keys.indexOf('ma3.deployOnSave.reload'), keys.indexOf('ma3.deployOnSave') + 1);
+  assert.strictEqual(keys.indexOf('ma3.deployOnSaveReload'), keys.indexOf('ma3.deployOnSave') + 1);
+});
+
+test('workspaceShow: object numbers and names a project already uses, for completion with no console', () => {
+  const { workspaceShow } = require('../lib/offlineShow');
+  const show = workspaceShow([
+    { file: 'a.lua', target: 'ma3', text: 'Cmd("Go+ Macro 12")\nCmd("Label Macro 12 \\"Intro\\"")\nCmd("Call Preset 2.5")\nCmd("Go+ Sequence 3 Thru 5")' },
+    { file: 'b.gma3macro', target: 'ma3', text: 'Go+ Macro 4\nLabel Group 7 "Front"' },
+  ]);
+  assert.deepStrictEqual(show.Macro.map((o) => o.no), ['4', '12']);
+  assert.strictEqual(show.Macro.find((o) => o.no === '12').name, 'Intro');
+  assert.deepStrictEqual(show.Sequence.map((o) => o.no), ['3', '4', '5']);
+  assert.ok(show.Preset.some((o) => o.no === '2.5'));
+  assert.ok(show.Group && show.Group[0].name === 'Front', 'a labelled object counts even when nothing else uses it');
+});
+
+test('no setting name is also the parent of another (VS Code cannot read ma3.a.b when ma3.a is a value)', () => {
+  const keys = Object.keys(contrib.configuration.properties);
+  for (const k of keys) {
+    const child = keys.find((o) => o.startsWith(k + '.'));
+    assert.ok(!child, `${k} is both a setting and the parent of ${child}`);
+  }
 });
