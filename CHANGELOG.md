@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.4.7 (not released)
+## 0.4.8
+
+- **grandMA2 address completion**: inside `gma.show.getobj.handle("Root 3.")` (either quote), the child numbers and names under the address typed so far complete from the console, one level at a time (needs LuaBridge_MA2). With no console they complete from the bundled grandMA2 tree instead, marked "(bundled sample)": one sample per class path, so a pool lists only what was sampled.
+- **Hot reload** (`ma3.deployOnSave.reload`, off by default): with deploy on save, a pool slot in `ma3.deployAndRun.slot` and the LuaBridge running, each save re-imports and starts the plugin on the console.
+- **Marketplace icon**: the BLT logo on a solid white square (512 px, no transparency).
+- **Release pipeline**: pushing a version tag now also creates the GitHub release with the VSIX attached and this changelog section as its notes.
+
+## 0.4.7
 
 Ease of use, for every skill level. No feature was removed.
 

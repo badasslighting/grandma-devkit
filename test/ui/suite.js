@@ -366,6 +366,32 @@ testMa3('Install LuaBridge over OSC brings a stopped bridge back (grandMA3)', as
   assert.ok(bridge.status(dir).running, 'the original bridge is running again');
 });
 
+test('grandMA2: handle("Root ") completes root numbers from the bundled tree or the console', async () => {
+  const text = 'local h = gma.show.getobj.handle("Root ';
+  const { doc } = await openLua('ma2offline.lua', text);
+  const r = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, text.length));
+  const nums = r.items.filter((i) => /^\d+$/.test(i.label));
+  assert.ok(nums.length > 5, `root numbers offered: ${r.items.map((i) => i.label).slice(0, 12).join(',')}`);
+});
+
+tests.push({
+  name: 'grandMA2: gma.show.getobj.handle("Root n.") completes the numbers and names under the address',
+  needs: () => up(bridgeLib.defaultBridgeDirMa2()),
+  why: 'grandMA2 onPC LuaBridge_MA2 not running',
+  fn: async () => {
+    const { doc } = await openLua('ma2path.lua', 'local h = gma.show.getobj.handle("Root ")');
+    const complete = (line, col) => vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(line, col));
+    const roots = await complete(0, 'local h = gma.show.getobj.handle("Root '.length);
+    const rootNums = roots.items.filter((i) => typeof i.label === 'string' && /^\d+$/.test(i.label)).map((i) => i.label);
+    assert.ok(rootNums.length > 5, `root numbers offered: ${rootNums.join(',')}`);
+    const first = rootNums[0];
+    const { doc: doc2 } = await openLua('ma2path2.lua', `local h = gma.show.getobj.handle("Root ${first}.")`);
+    const kids = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc2.uri, new vscode.Position(0, `local h = gma.show.getobj.handle("Root ${first}.`.length));
+    assert.ok(Array.isArray(kids.items), 'children request answers (a leaf root may offer none)');
+    assert.ok(kids.items.filter((i) => typeof i.label === 'string' && /^\d+$/.test(i.label)).length >= 0, 'children request answers');
+  },
+});
+
 tests.push({
   name: 'grandMA2: gma.cmd strings complete real macros and layouts, and the object tree lists roots and children',
   needs: () => up(bridgeLib.defaultBridgeDirMa2()),
