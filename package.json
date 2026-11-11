@@ -2,7 +2,7 @@
   "name": "grandma-devkit",
   "displayName": "Devkit for Grand MA2+MA3",
   "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -13,7 +13,15 @@
   "categories": ["Programming Languages", "Snippets", "Linters"],
   "keywords": ["grandMA3", "grandMA2", "MA3", "MA2", "gma", "lua", "lighting", "plugin"],
   "main": "./extension.js",
-  "activationEvents": ["onLanguage:lua", "onLanguage:gma2macro", "onLanguage:gma3macro", "onLanguage:xml", "workspaceContains:**/*.lua", "workspaceContains:**/*.gma2macro", "workspaceContains:**/*.gma3macro"],
+  "activationEvents": [
+    "onLanguage:lua",
+    "onLanguage:gma2macro",
+    "onLanguage:gma3macro",
+    "onLanguage:xml",
+    "workspaceContains:**/*.lua",
+    "workspaceContains:**/*.gma2macro",
+    "workspaceContains:**/*.gma3macro"
+  ],
   "extensionPack": ["sumneko.lua"],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
@@ -29,9 +37,7 @@
       { "id": "gma3macro", "extensions": [".gma3macro"], "aliases": ["grandMA3 Macro"], "configuration": "./language-configuration-macro.json" }
     ],
     "snippets": [{ "language": "lua", "path": "./snippets/lua.json" }],
-    "configurationDefaults": {
-      "[lua]": { "editor.quickSuggestions": { "other": true, "comments": false, "strings": true } }
-    },
+    "configurationDefaults": { "[lua]": { "editor.quickSuggestions": { "other": true, "comments": false, "strings": true } } },
     "commands": [
       { "command": "ma3.newPlugin", "title": "New Plugin", "category": "grandMA" },
       { "command": "ma3.deploy", "title": "Deploy Plugin to Plugins Folder", "category": "grandMA" },
@@ -96,13 +102,17 @@
       { "command": "ma3.bank.insert", "title": "Insert Variable (Favorites and Most Used First)", "category": "grandMA" },
       { "command": "ma3.bank.export", "title": "Export Favorite Variables to a File", "category": "grandMA" },
       { "command": "ma3.bank.import", "title": "Import Favorite Variables From a File", "category": "grandMA" },
-      { "command": "ma3.bank.applyFavorites", "title": "Set Favorite Variables on the Console", "category": "grandMA" }
+      { "command": "ma3.bank.applyFavorites", "title": "Set Favorite Variables on the Console", "category": "grandMA" },
+      { "command": "ma3.connect", "title": "Connect to the Console", "category": "grandMA" },
+      { "command": "ma3.getStarted", "title": "Open Get Started", "category": "grandMA" },
+      { "command": "ma3.vars.menu", "title": "Variables...", "category": "grandMA" },
+      { "command": "ma3.setProjectConsole", "title": "Set Console for This Project", "category": "grandMA" }
     ],
     "views": {
       "explorer": [
         { "id": "ma3.objects", "name": "grandMA3 Objects" },
-        { "id": "ma3.vars", "name": "Console Variables" },
-        { "id": "ma3.varbank", "name": "Variable Bank" }
+        { "id": "ma3.vars", "name": "Console Variables", "when": "config.ma3.vars.enabled" },
+        { "id": "ma3.varbank", "name": "Variable Bank", "when": "config.ma3.vars.enabled" }
       ]
     },
     "menus": {
@@ -141,11 +151,68 @@
         { "command": "ma3.deploy", "when": "resourceExtname == .lua || resourceExtname == .xml", "group": "ma3" },
         { "command": "ma3.vars.replaceRange", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@1" },
         { "command": "ma3.vars.preview", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@2" },
-        { "command": "ma3.vars.extract", "when": "(editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro) && editorHasSelection", "group": "ma3vars@3" },
+        {
+          "command": "ma3.vars.extract",
+          "when": "(editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro) && editorHasSelection",
+          "group": "ma3vars@3"
+        },
         { "command": "ma3.vars.convert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@4" },
         { "command": "ma3.bank.insert", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@5" },
         { "command": "ma3.bank.favorite", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro", "group": "ma3vars@6" },
-        { "command": "ma3.findObjectUsagesAtCursor", "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro || editorLangId == xml", "group": "ma3@9" }
+        {
+          "command": "ma3.findObjectUsagesAtCursor",
+          "when": "editorLangId == lua || editorLangId == gma2macro || editorLangId == gma3macro || editorLangId == xml",
+          "group": "ma3@9"
+        }
+      ],
+      "commandPalette": [
+        { "command": "ma3.osc.send", "when": "ma3.console != ma2" },
+        { "command": "ma3.osc.sendSelection", "when": "ma3.console != ma2" },
+        { "command": "ma3.osc.setup", "when": "ma3.console != ma2" },
+        { "command": "ma3.osc.disable", "when": "ma3.console != ma2" },
+        { "command": "ma3.updateApiFromConsole", "when": "ma3.console != ma2" },
+        { "command": "ma3.newPlugin", "when": "ma3.console != ma2" },
+        { "command": "ma3.importHelpLua", "when": "ma3.console != ma2" },
+        { "command": "ma3.copyImportCommand", "when": "ma3.console != ma2" },
+        { "command": "ma3.profileFunction", "when": "ma3.console != ma2" },
+        { "command": "ma3.dialogDesigner.open", "when": "ma3.console != ma2" },
+        { "command": "ma3.overlayDesigner.open", "when": "ma3.console != ma2" },
+        { "command": "ma3.telnet.send", "when": "ma3.console != ma3" },
+        { "command": "ma3.telnet.sendSelection", "when": "ma3.console != ma3" },
+        { "command": "ma3.telnet.setPassword", "when": "ma3.console != ma3" },
+        { "command": "ma3.telnet.monitor", "when": "ma3.console != ma3" },
+        { "command": "ma3.telnet.stopMonitor", "when": "ma3.console != ma3" },
+        { "command": "ma3.newPluginMa2", "when": "ma3.console != ma3" },
+        { "command": "ma3.checkMa2Api", "when": "ma3.console != ma3" },
+        { "command": "ma3.objects.copyPath", "when": "false" },
+        { "command": "ma3.objects.copyAddress", "when": "false" },
+        { "command": "ma3.objects.insertPath", "when": "false" },
+        { "command": "ma3.objects.showProperties", "when": "false" },
+        { "command": "ma3.vars.refresh", "when": "false" },
+        { "command": "ma3.vars.copyName", "when": "false" },
+        { "command": "ma3.bank.refresh", "when": "false" },
+        { "command": "ma3.bank.unfavorite", "when": "false" },
+        { "command": "ma3.bank.editFavorite", "when": "false" },
+        { "command": "ma3.bank.reveal", "when": "false" },
+        { "command": "ma3.vars.replaceRange", "when": "false" },
+        { "command": "ma3.vars.preview", "when": "false" },
+        { "command": "ma3.vars.inline", "when": "false" },
+        { "command": "ma3.vars.extract", "when": "false" },
+        { "command": "ma3.vars.convert", "when": "false" },
+        { "command": "ma3.vars.set", "when": "false" },
+        { "command": "ma3.vars.add", "when": "false" },
+        { "command": "ma3.vars.delete", "when": "false" },
+        { "command": "ma3.vars.watch", "when": "false" },
+        { "command": "ma3.vars.stopWatch", "when": "false" },
+        { "command": "ma3.vars.snapshot", "when": "false" },
+        { "command": "ma3.vars.diff", "when": "false" },
+        { "command": "ma3.vars.restore", "when": "false" },
+        { "command": "ma3.bank.favorite", "when": "false" },
+        { "command": "ma3.bank.insert", "when": "false" },
+        { "command": "ma3.bank.export", "when": "false" },
+        { "command": "ma3.bank.import", "when": "false" },
+        { "command": "ma3.bank.applyFavorites", "when": "false" },
+        { "command": "ma3.vars.menu", "when": "config.ma3.vars.enabled" }
       ]
     },
     "configuration": {
@@ -168,16 +235,8 @@
           "scope": "application",
           "markdownDescription": "Allow Telnet to a host other than this machine (loopback). **Telnet is unencrypted and unauthenticated**: the console password and every command are sent in cleartext and can be captured or tampered with by anyone on the network path. Enable only on a trusted, isolated network. Read from user settings only."
         },
-        "ma3.telnet.port": {
-          "type": "number",
-          "default": 30000,
-          "description": "Telnet command-line port."
-        },
-        "ma3.telnet.monitorPort": {
-          "type": "number",
-          "default": 30001,
-          "description": "Telnet System Monitor port (Lua runtime errors and console messages)."
-        },
+        "ma3.telnet.port": { "type": "number", "default": 30000, "description": "Telnet command-line port." },
+        "ma3.telnet.monitorPort": { "type": "number", "default": 30001, "description": "Telnet System Monitor port (Lua runtime errors and console messages)." },
         "ma3.telnet.user": {
           "type": "string",
           "default": "administrator",
@@ -195,27 +254,14 @@
           "default": "auto",
           "markdownDescription": "How **Deploy and Reload on Console** reaches the console: `auto` uses the LuaBridge when it is running, and otherwise Telnet (grandMA2) or OSC (grandMA3). OSC gives no confirmation."
         },
-        "ma3.osc.host": {
-          "type": "string",
-          "default": "127.0.0.1",
-          "description": "Host of the grandMA3 console's OSC input."
-        },
-        "ma3.osc.port": {
-          "type": "number",
-          "default": 8000,
-          "description": "UDP port of OSC line 1 on the console."
-        },
+        "ma3.osc.host": { "type": "string", "default": "127.0.0.1", "description": "Host of the grandMA3 console's OSC input." },
+        "ma3.osc.port": { "type": "number", "default": 8000, "description": "UDP port of OSC line 1 on the console." },
         "ma3.osc.prefix": {
           "type": "string",
           "default": "",
           "description": "Prefix of OSC line 1 on the console; commands go to /<prefix>/cmd, or /cmd when empty."
         },
-        "ma3.osc.gapMs": {
-          "type": "number",
-          "default": 250,
-          "minimum": 50,
-          "description": "Pause between OSC commands in milliseconds."
-        },
+        "ma3.osc.gapMs": { "type": "number", "default": 250, "minimum": 50, "description": "Pause between OSC commands in milliseconds." },
         "ma3.bridge.slot": {
           "type": "number",
           "default": 0,
@@ -264,11 +310,7 @@
           "minimum": 0,
           "markdownDescription": "Plugin pool slot that **Deploy and Reload on Console** imports the plugin into and starts, through the LuaBridge plugin. 0 only deploys. Use onPC with a throwaway show: the slot is overwritten."
         },
-        "ma3.dataVersion": {
-          "type": "string",
-          "default": "2.0.0.0",
-          "description": "DataVersion written into new plugin XML manifests."
-        },
+        "ma3.dataVersion": { "type": "string", "default": "2.0.0.0", "description": "DataVersion written into new plugin XML manifests." },
         "ma3.bridge.dir": {
           "type": "string",
           "default": "",
@@ -328,12 +370,63 @@
           "minimum": 500,
           "description": "How often Watch Console Variables reads the console, in milliseconds."
         },
-        "ma3.diagnostics": {
+        "ma3.diagnostics": { "type": "boolean", "default": true, "description": "Check plugin manifests and flag loops that never yield." },
+        "ma3.vars.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Check plugin manifests and flag loops that never yield."
+          "description": "Show the Console Variables and Variable Bank views and the \"grandMA: Variables...\" menu. Turn it off if you do not use console variables; variable checks and completion in your files are not affected."
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "ma3.getStarted",
+        "title": "Get started with the grandMA Devkit",
+        "description": "Pick your console, connect, and run your first Lua.",
+        "steps": [
+          {
+            "id": "console",
+            "title": "Which console?",
+            "description": "The Devkit works out grandMA2 or grandMA3 from each file. If you want to force one, set it.\n[Choose console](command:workbench.action.openSettings?%5B%22ma3.target%22%5D)",
+            "media": { "markdown": "media/walkthrough/console.md" },
+            "completionEvents": ["onSettingChanged:ma3.target"]
+          },
+          {
+            "id": "create",
+            "title": "Create a plugin",
+            "description": "Makes a folder with a Lua file and its manifest.\n[New grandMA3 Plugin](command:ma3.newPlugin)\n[New grandMA2 Plugin](command:ma3.newPluginMa2)",
+            "media": { "markdown": "media/walkthrough/create.md" },
+            "completionEvents": ["onCommand:ma3.newPlugin", "onCommand:ma3.newPluginMa2"]
+          },
+          {
+            "id": "connect",
+            "title": "Connect to your console",
+            "description": "Run code on the console from VS Code through a small helper plugin, the LuaBridge. The status bar shows whether it is connected.\n[Connect to the Console](command:ma3.connect)",
+            "media": { "markdown": "media/walkthrough/connect.md" },
+            "completionEvents": ["onCommand:ma3.installBridge"]
+          },
+          {
+            "id": "run",
+            "title": "Run your code",
+            "description": "Runs the open file, or the selected lines, on the console and prints the result in the grandMA Devkit panel.\n[Run on Console](command:ma3.runOnConsole)",
+            "media": { "markdown": "media/walkthrough/run.md" },
+            "completionEvents": ["onCommand:ma3.runOnConsole"]
+          },
+          {
+            "id": "deploy",
+            "title": "Deploy the plugin",
+            "description": "Copies the plugin to the console, or to a USB stick for a real console.\n[Deploy to Plugins Folder](command:ma3.deploy)\n[Export to USB Stick](command:ma3.exportToUsb)",
+            "media": { "markdown": "media/walkthrough/deploy.md" },
+            "completionEvents": ["onCommand:ma3.deploy", "onCommand:ma3.exportToUsb"]
+          },
+          {
+            "id": "more",
+            "title": "Find the rest",
+            "description": "Everything is under \"grandMA\" in the Command Palette (Ctrl+Shift+P). Only commands that fit the file you are in are listed.\n[Open the Command Palette](command:workbench.action.showCommands)",
+            "media": { "markdown": "media/walkthrough/more.md" }
+          }
+        ]
+      }
+    ]
   }
 }

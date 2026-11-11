@@ -21,6 +21,7 @@ const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus }
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
 const { detectTarget, detectTargetForFile } = require('./lib/target');
 const varFeatures = require('./lib/varFeatures');
+const uxFeatures = require('./lib/ux');
 const { macroKind, toRaw } = require('./lib/macroFiles');
 const objectUsages = require('./lib/objectUsages');
 const { bumpVersion, zip } = require('./lib/release');
@@ -165,7 +166,7 @@ function activate(context) {
       nameCache.clear();
       const data = await getShow(true, activeTarget());
       const n = data ? Object.values(data).reduce((a, v) => a + v.length, 0) : 0;
-      vscode.window.showInformationMessage(n ? `Loaded ${n} show objects for completion.` : 'No show data (is the LuaBridge plugin running, and ma3.liveCompletion on?).');
+      notify(n ? `Loaded ${n} show objects for completion.` : 'No show data (is the LuaBridge plugin running, and ma3.liveCompletion on?).');
     })
   );
 
@@ -830,12 +831,17 @@ function activate(context) {
       if (!/^\d+$/.test(slot)) return vscode.window.showErrorMessage('Plugin pool slot must be a number.');
       // The Library form creates a real plugin; plain `Import "x" At Plugin` makes an empty UserPlugin.
       await vscode.env.clipboard.writeText(`Import Plugin Library "${lib}" At Plugin ${slot} /nc`);
-      vscode.window.showInformationMessage('Import command copied. Paste it into the console command line.');
+      notify('Import command copied. Paste it into the console command line.');
     })
   );
 
   // ---- run on console through the LuaBridge plugin
   const output = vscode.window.createOutputChannel('grandMA Devkit');
+  // A plain confirmation does not need a pop-up the user must dismiss: a few seconds in the status bar, and a line in the panel.
+  const notify = (msg) => {
+    output.appendLine(msg);
+    vscode.window.setStatusBarMessage(`$(check) ${msg}`, 6000);
+  };
   const runDiagnostics = vscode.languages.createDiagnosticCollection('ma3-run');
   context.subscriptions.push(output, runDiagnostics);
   const bridgeDir = () => bridgeDirFor('ma3');
@@ -893,7 +899,6 @@ function activate(context) {
     return md ? `\n\n${md}` : '';
   };
   let treeTarget = 'ma3';
-  let propsOut = null;
   const ma2Lua = (addr) => `gma.show.getobj.handle("${addr}")`;
   const objectTree = {
     onDidChangeTreeData: treeChanged.event,
@@ -992,12 +997,10 @@ function activate(context) {
     }),
     vscode.commands.registerCommand('ma3.objects.showProperties', async (el) => {
       if (!el || !el.path) return;
-      if (!propsOut) {
-        propsOut = vscode.window.createOutputChannel('grandMA Properties');
-        context.subscriptions.push(propsOut);
-      }
-      const out = propsOut;
-      out.clear();
+      const out = output; // one panel for everything the extension prints
+      out.show(true);
+      out.appendLine(`
+--- properties of ${el.addr || el.path.join('.')} ---`);
       const row = (p) => `${p.name.padEnd(28)} ${String(p.type).padEnd(16)} ${p.readOnly ? 'ro' : 'rw'}  ${p.value !== undefined ? p.value : ''}${p.enumName ? `  [${p.enumName}]` : ''}`;
       if (el.target === 'ma2') {
         out.appendLine(`${el.addr || el.path.join('.')}  (grandMA2, from the bundled schema; no live values)`);
@@ -1263,8 +1266,7 @@ function activate(context) {
   );
 
   // ---- Telnet to the console command line (verified on grandMA2 onPC 3.9.61; grandMA3 onPC does not listen)
-  const telnetOut = vscode.window.createOutputChannel('grandMA Console');
-  context.subscriptions.push(telnetOut);
+  const telnetOut = output; // console replies share the one grandMA Devkit panel
   // The Telnet destination receives the stored console password, so it may only come from the user's own
   // settings (or the built-in default). Values supplied by a workspace (.vscode/settings.json,
   // *.code-workspace, folder settings) are ignored, since an untrusted workspace could redirect the login.
@@ -1401,7 +1403,7 @@ function activate(context) {
       }
       if (!ma2) {
         if (bridge.status(bridgeDirFor('ma3')).running) {
-          vscode.window.showInformationMessage(`LuaBridge files updated in ${dest}; the bridge is already running.`);
+          notify(`LuaBridge files updated in ${dest}; the bridge is already running.`);
           return true;
         }
         // grandMA3 has no Telnet; OSC can import and start the plugin if OSC command input is already on.
@@ -1413,7 +1415,7 @@ function activate(context) {
         if (!sent) return null;
         for (let i = 0; i < 30; i++) {
           if (bridge.status(bridgeDirFor('ma3')).running) {
-            vscode.window.showInformationMessage('LuaBridge is running; Run on Console now works for grandMA3.');
+            notify('LuaBridge is running; Run on Console now works for grandMA3.');
             return true;
           }
           await new Promise((r) => setTimeout(r, 500));
@@ -1423,7 +1425,7 @@ function activate(context) {
       }
       // Importing again would restart the bridge (and, with a stray backup file around, add duplicates), so leave a running one alone.
       if (!opts.force && bridge.status(bridgeDirFor('ma2')).running) {
-        vscode.window.showInformationMessage('LuaBridge_MA2 files updated; the bridge is already running. Re-import it (or pass force) to load the new copy.');
+        notify('LuaBridge_MA2 files updated; the bridge is already running. Re-import it (or pass force) to load the new copy.');
         return true;
       }
       const slot = opts.slot || (await vscode.window.showInputBox({ prompt: 'Plugin pool slot to import LuaBridge_MA2 into (overwrites that slot)', value: String(cfg().get('bridge.slot') || 99), validateInput: (v) => (/^\d+$/.test(v) ? null : 'A slot number') }));
@@ -1434,7 +1436,7 @@ function activate(context) {
       const dir = bridgeDirFor('ma2');
       for (let i = 0; i < 24; i++) {
         if (bridge.status(dir).running) {
-          vscode.window.showInformationMessage('LuaBridge_MA2 is running; Run on Console now works for grandMA2.');
+          notify('LuaBridge_MA2 is running; Run on Console now works for grandMA2.');
           return true;
         }
         await new Promise((r) => setTimeout(r, 500));
@@ -1705,6 +1707,7 @@ function activate(context) {
     onChange: () => vscode.workspace.textDocuments.forEach(refresh),
   });
   vscode.workspace.textDocuments.forEach(refresh);
+  uxFeatures.register({ vscode, context, cfg, bridge, bridgeDirFor, targetOf, macroKind });
 
   // ---- Find Usages of Console Object: where Macro 12 / Preset 2.5 is named across the workspace (lib/objectUsages.js),
   // over the variable index's files, plus what the cached show holds under that number (no bridge call).
@@ -1780,7 +1783,7 @@ function activate(context) {
       const api = parseHelpLua(fs.readFileSync(pick[0].fsPath, 'utf8'));
       if (api.global.length === 0) return vscode.window.showErrorMessage('No API functions found in that file.');
       applyApi(api);
-      vscode.window.showInformationMessage(`Loaded ${api.global.length} global and ${api.object.length} object functions.`);
+      notify(`Loaded ${api.global.length} global and ${api.object.length} object functions.`);
     }),
     // Rebuilds the API list from the running grandMA3 console (GetApiDescriptor), no HelpLua file needed.
     vscode.commands.registerCommand('ma3.updateApiFromConsole', async () => {

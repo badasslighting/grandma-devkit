@@ -163,7 +163,7 @@ test('property names and enum values complete inside Get/Set, and hover names th
 
 const propsOutput = () =>
   vscode.workspace.textDocuments
-    .filter((d) => d.uri.scheme === 'output' && /grandMA Properties/i.test(d.uri.path + d.uri.authority + d.uri.query))
+    .filter((d) => d.uri.scheme === 'output' && /grandMA Devkit/i.test(d.uri.path + d.uri.authority + d.uri.query))
     .map((d) => d.getText())
     .join('\n');
 
@@ -538,6 +538,37 @@ test('contributed settings have the declared defaults', async () => {
   const cfg = vscode.workspace.getConfiguration('ma3');
   assert.strictEqual(cfg.get('bridge.timeout'), 2);
   assert.strictEqual(cfg.get('bridge.dir'), '');
+});
+
+test('ease of use: Connect, Get Started and Variables commands exist, the walkthrough is contributed, ma3.vars.enabled defaults on', async () => {
+  const cmds = await vscode.commands.getCommands(true);
+  for (const c of ['ma3.connect', 'ma3.getStarted', 'ma3.vars.menu']) assert.ok(cmds.includes(c), `${c} is registered`);
+  const ext = vscode.extensions.all.find((e) => e.packageJSON && e.packageJSON.name === 'grandma-devkit');
+  assert.ok(ext.packageJSON.contributes.walkthroughs.some((w) => w.id === 'ma3.getStarted'));
+  assert.strictEqual(vscode.workspace.getConfiguration('ma3').get('vars.enabled'), true);
+});
+
+test('ease of use: the ma3.console context follows the active file (grandMA3, grandMA2, none)', async () => {
+  await openLua('ctx3.lua', 'Printf("hi")\nCmd("Go+ Executor 1")');
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma3' ? 1 : 0), 'ma3 context for a grandMA3 file');
+  await openLua('ctx2.lua', 'gma.echo("hi")\ngma.cmd("Go+ Executor 1")');
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma2' ? 1 : 0), 'ma2 context for a grandMA2 file');
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === '' ? 1 : 0), 'empty context with no file');
+});
+
+test('ease of use: a project console (ma3.target) drives the palette context when no file is open', async () => {
+  const cfg = vscode.workspace.getConfiguration('ma3');
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  try {
+    await cfg.update('target', 'ma2', vscode.ConfigurationTarget.Workspace);
+    await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma2' ? 1 : 0), 'ma2 from the project setting');
+    await cfg.update('target', 'ma3', vscode.ConfigurationTarget.Workspace);
+    await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma3' ? 1 : 0), 'ma3 from the project setting');
+  } finally {
+    await cfg.update('target', undefined, vscode.ConfigurationTarget.Workspace);
+  }
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === '' ? 1 : 0), 'empty again once the setting is cleared');
 });
 
 testMa3('LuaBridge Status reports the live heartbeat', async () => {
