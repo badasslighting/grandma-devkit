@@ -64,3 +64,13 @@ test('ma2PathEntries keeps children that have a pool number', () => {
   const parsed = parseMa2Tree(["total=2 ;; 0|0|1|CMD_GROUP|Front ;; 1|0||CMD_GROUP|Blank"]);
   assert.deepStrictEqual(ma2PathEntries(parsed), [{ number: '1', name: 'Front', cls: 'GROUP' }]);
 });
+
+test('offlineAddressChildren lists the bundled grandMA2 tree by address, without a console', () => {
+  const { offlineAddressChildren } = require('../lib/offlineTree');
+  const roots = offlineAddressChildren([]);
+  assert.ok(roots.length > 10 && roots.every((r) => /^\d+$/.test(r.number)), 'root numbers');
+  assert.ok(roots.some((r) => r.number === '1' && r.name === 'Showfile'));
+  const kids = offlineAddressChildren([1]);
+  assert.ok(kids.some((k) => k.number === '1' && /HISTORY/.test(k.cls)), 'children of Root 1');
+  assert.deepStrictEqual(offlineAddressChildren([999]), [], 'unknown address');
+});

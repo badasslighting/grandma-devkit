@@ -27,7 +27,7 @@ const objectUsages = require('./lib/objectUsages');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
-const { offlineChildren } = require('./lib/offlineTree');
+const { offlineChildren, offlineAddressChildren } = require('./lib/offlineTree');
 const nodeIndex = require('./lib/nodeIndex');
 const props = require('./lib/props');
 const enums = require('./lib/enums');
@@ -206,6 +206,36 @@ function activate(context) {
               return item;
             });
           }
+          const mp = targetOf(doc) === 'ma2' ? ma2PathContext(before) : null;
+          if (mp) {
+            // gma.show.getobj.handle("Root 3.2.|": the numbers and names under that address, from the console.
+            let lua;
+            try {
+              lua = ma2TreeLua(mp.numbers, 300, true);
+            } catch (_) {
+              return [];
+            }
+            const target = 'ma2';
+            const dir = bridgeDirFor(target);
+            const toItems = (entries, note) =>
+              entries.map((e) => {
+                const item = new vscode.CompletionItem(e.number, vscode.CompletionItemKind.Module);
+                item.detail = [e.cls, e.name].filter(Boolean).join(' ') + note;
+                item.sortText = e.number.padStart(6, '0');
+                item.commitCharacters = ['.'];
+                return item;
+              });
+            // No console: the bundled grandMA2 tree (a sample per class path, so pools list only what was sampled).
+            if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return toItems(offlineAddressChildren(mp.numbers), ' (bundled sample)');
+            let parsed;
+            try {
+              const r = await bridge.run(dir, lua, cfg().get('bridge.timeout'));
+              parsed = r.ok ? parseMa2Tree(r.returns) : { items: [] };
+            } catch (_) {
+              return [];
+            }
+            return toItems(ma2PathEntries(parsed), '');
+          }
           const str = stringContext(before);
           if (str && attributeContext(str) && targetOf(doc) === 'ma3') {
             const names = (await liveFetch('attributes', attributeNamesLua(), parseNames)).map((n) => {
@@ -270,33 +300,6 @@ function activate(context) {
             return enums.enumMembers(en.name, await liveFetch(`enum:${en.name}`, enumMembersLua(en.name), parseMembers)).map((m) => {
               const item = new vscode.CompletionItem(m.name, vscode.CompletionItemKind.EnumMember);
               item.detail = `Enums.${en.name}.${m.name} = ${m.value}`;
-              return item;
-            });
-          }
-          const mp = targetOf(doc) === 'ma2' ? ma2PathContext(before) : null;
-          if (mp) {
-            // gma.show.getobj.handle("Root 3.2.|": the numbers and names under that address, from the console.
-            let lua;
-            try {
-              lua = ma2TreeLua(mp.numbers, 300, true);
-            } catch (_) {
-              return [];
-            }
-            const target = 'ma2';
-            const dir = bridgeDirFor(target);
-            if (!cfg().get('liveCompletion') || !dir || !bridge.status(dir).running) return [];
-            let parsed;
-            try {
-              const r = await bridge.run(dir, lua, cfg().get('bridge.timeout'));
-              parsed = r.ok ? parseMa2Tree(r.returns) : { items: [] };
-            } catch (_) {
-              return [];
-            }
-            return ma2PathEntries(parsed).map((e) => {
-              const item = new vscode.CompletionItem(e.number, vscode.CompletionItemKind.Module);
-              item.detail = [e.cls, e.name].filter(Boolean).join(' ');
-              item.sortText = e.number.padStart(6, '0');
-              item.commitCharacters = ['.'];
               return item;
             });
           }
