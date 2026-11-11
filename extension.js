@@ -1707,7 +1707,7 @@ function activate(context) {
     onChange: () => vscode.workspace.textDocuments.forEach(refresh),
   });
   vscode.workspace.textDocuments.forEach(refresh);
-  uxFeatures.register({ vscode, context, bridge, bridgeDirFor, targetOf, macroKind });
+  uxFeatures.register({ vscode, context, cfg, bridge, bridgeDirFor, targetOf, macroKind });
 
   // ---- Find Usages of Console Object: where Macro 12 / Preset 2.5 is named across the workspace (lib/objectUsages.js),
   // over the variable index's files, plus what the cached show holds under that number (no bridge call).

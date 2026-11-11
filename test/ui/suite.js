@@ -557,6 +557,20 @@ test('ease of use: the ma3.console context follows the active file (grandMA3, gr
   await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === '' ? 1 : 0), 'empty context with no file');
 });
 
+test('ease of use: a project console (ma3.target) drives the palette context when no file is open', async () => {
+  const cfg = vscode.workspace.getConfiguration('ma3');
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  try {
+    await cfg.update('target', 'ma2', vscode.ConfigurationTarget.Workspace);
+    await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma2' ? 1 : 0), 'ma2 from the project setting');
+    await cfg.update('target', 'ma3', vscode.ConfigurationTarget.Workspace);
+    await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === 'ma3' ? 1 : 0), 'ma3 from the project setting');
+  } finally {
+    await cfg.update('target', undefined, vscode.ConfigurationTarget.Workspace);
+  }
+  await until(async () => ((await vscode.commands.executeCommand('ma3._consoleContext')) === '' ? 1 : 0), 'empty again once the setting is cleared');
+});
+
 testMa3('LuaBridge Status reports the live heartbeat', async () => {
   await openLua('st3.lua', 'return 1'); // a grandMA3 file, so Status checks the grandMA3 bridge
   popups.length = 0;

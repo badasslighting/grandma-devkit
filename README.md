@@ -35,7 +35,7 @@ Browse the grandMA2 (onPC 3.9.61.1) and grandMA3 (onPC 2.5.1.0) object trees onl
 
 ## Which console
 
-The extension decides per Lua file: grandMA2 when the code calls `gma.*` or the plugin's manifest is a grandMA2 one (`<MA ...>`), grandMA3 otherwise. Set `ma3.target` to `ma2` or `ma3` to force it.
+The extension decides per Lua file (to fix one console for a whole project, run **grandMA: Set Console for This Project**): grandMA2 when the code calls `gma.*` or the plugin's manifest is a grandMA2 one (`<MA ...>`), grandMA3 otherwise. Set `ma3.target` to `ma2` or `ma3` to force it.
 
 ## Both consoles
 

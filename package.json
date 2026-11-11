@@ -105,7 +105,8 @@
       { "command": "ma3.bank.applyFavorites", "title": "Set Favorite Variables on the Console", "category": "grandMA" },
       { "command": "ma3.connect", "title": "Connect to the Console", "category": "grandMA" },
       { "command": "ma3.getStarted", "title": "Open Get Started", "category": "grandMA" },
-      { "command": "ma3.vars.menu", "title": "Variables...", "category": "grandMA" }
+      { "command": "ma3.vars.menu", "title": "Variables...", "category": "grandMA" },
+      { "command": "ma3.setProjectConsole", "title": "Set Console for This Project", "category": "grandMA" }
     ],
     "views": {
       "explorer": [

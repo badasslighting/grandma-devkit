@@ -9,6 +9,7 @@ Ease of use, for every skill level. No feature was removed.
 - **The Command Palette only lists what fits.** In a grandMA3 file the Telnet commands, the MA2 plugin template and the MA2 API check are hidden; in a grandMA2 file OSC, the grandMA3 API commands, the profiler and the designers are hidden. With no Lua file open everything is listed. Commands that need a tree or view item are no longer listed in the palette.
 - **Variables behind one menu**: the 27 variable commands are reached through **grandMA: Variables...** (and the views and context menus). `ma3.vars.enabled` (default on) hides the Console Variables and Variable Bank views and that menu; variable checks and completion are unaffected.
 - **One output panel**: console replies and Show Properties now print in **grandMA Devkit**, not in two more panels. Plain confirmations (bridge installed, import command copied, API loaded) show in the status bar instead of a pop-up.
+- **Console per project**: **grandMA: Set Console for This Project** (also in the status-bar menu) saves grandMA3, grandMA2 or auto-detect in the project's `.vscode/settings.json`. With a console set, the palette follows it even when no file is open; other projects are unaffected.
 - **README**: Quick start and a "How it connects" table come first; the tables of console behaviour for conditions and variables moved to `docs/console-behaviour.md`.
 
 ## 0.4.6
