@@ -2,7 +2,7 @@
   "name": "grandma-devkit",
   "displayName": "Devkit for Grand MA2+MA3",
   "description": "Write Lua plugins for grandMA3 and grandMA2: API completion, hover and signature help, lint checks, plugin scaffolding, one-command deploy, and run-on-console through a LuaBridge.",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "publisher": "badasslighting",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -304,7 +304,7 @@
           "default": false,
           "description": "Copy a plugin's files to the plugins folder whenever one of its .lua or .xml files is saved."
         },
-        "ma3.deployOnSave.reload": {
+        "ma3.deployOnSaveReload": {
           "type": "boolean",
           "default": false,
           "markdownDescription": "With `ma3.deployOnSave` on, a pool slot in `ma3.deployAndRun.slot` and the LuaBridge running, also re-import and start the plugin on the console after each save (a hot-reload loop). Use onPC with a throwaway show: the slot is overwritten."

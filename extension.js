@@ -16,6 +16,7 @@ const { pathContext, childrenLua, parseChildren } = require('./lib/objectPath');
 const { buildRunLua, parseResults, discoverTests, errorLine } = require('./lib/luaTests');
 const { listRemovableDrives, planExport, exportToStick } = require('./lib/usb');
 const { ma3ApiLua, parseMa3Api, diffApi, ma2WalkLua, parseMa2Walk, ma2Gaps } = require('./lib/liveApi');
+const { workspaceShow } = require('./lib/offlineShow');
 const { ma2TreeLua, parseMa2Tree, ma2Address, ma2ShowLua, ma2PathContext, ma2PathEntries } = require('./lib/ma2Objects');
 const { sendCommands, oscStatusLua, oscSetupLua, oscDisableLua, parseOscStatus } = require('./lib/osc');
 const { BY_PATH, members, memberContext, pathAt, activeCallPath } = require('./lib/ma2Api');
@@ -27,7 +28,7 @@ const objectUsages = require('./lib/objectUsages');
 const { bumpVersion, zip } = require('./lib/release');
 const { stringContext, suggestKeywords, conditionSuggestions, commandHover } = require('./lib/cmdContext');
 const { listLua, parseList } = require('./lib/objectTree');
-const { offlineChildren, offlineAddressChildren } = require('./lib/offlineTree');
+const { offlineChildren, offlineAddressChildren, offlineMa3Path } = require('./lib/offlineTree');
 const nodeIndex = require('./lib/nodeIndex');
 const props = require('./lib/props');
 const enums = require('./lib/enums');
@@ -282,9 +283,16 @@ function activate(context) {
               items.push(item);
             }
             const live = await getShow(false, cmdTarget);
-            for (const o of showSuggestions(str.text, live)) {
+            let offline = false;
+            let suggestions = showSuggestions(str.text, live);
+            if (!suggestions.length && vars) {
+              // No console (or nothing read for this kind): the numbers and names this project already uses.
+              suggestions = showSuggestions(str.text, workspaceShow(vars.entries().map((e) => ({ file: e.file, text: e.text, target: e.scan.target }))));
+              offline = true;
+            }
+            for (const o of suggestions) {
               const item = new vscode.CompletionItem(o.no, vscode.CompletionItemKind.Value);
-              item.detail = `${o.kind}: ${o.name}`;
+              item.detail = `${o.kind}: ${o.name || '(no name)'}${offline ? ' (used in this project)' : ''}`;
               item.filterText = `${o.no} ${o.name}`;
               item.range = range;
               item.sortText = `0${o.no.padStart(6, '0')}`;
@@ -312,17 +320,20 @@ function activate(context) {
             } catch (_) {
               return [];
             }
-            const found = await liveFetch(`path:${JSON.stringify(op.segments)}`, lua, parseChildren, 30000);
+            let found = await liveFetch(`path:${JSON.stringify(op.segments)}`, lua, parseChildren, 30000);
+            // No console: the bundled grandMA3 tree (one sample per class path).
+            const offline = !(found.children || found.properties) ? offlineMa3Path(op.segments) : null;
+            if (offline) found = offline;
             const items = [];
             for (const n of found.children || []) {
               const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.Module);
-              item.detail = 'child object';
+              item.detail = offline ? 'child object (bundled sample)' : 'child object';
               item.sortText = `0${n}`;
               items.push(item);
             }
             for (const n of found.properties || []) {
               const item = new vscode.CompletionItem(n, vscode.CompletionItemKind.Property);
-              item.detail = 'property';
+              item.detail = offline ? 'property (bundled)' : 'property';
               item.sortText = `1${n}`;
               items.push(item);
             }
@@ -675,11 +686,11 @@ function activate(context) {
       output.appendLine(`> reload ${path.basename(manifest)} into Plugin ${slot}${ma2 ? ' (grandMA2)' : ''}`);
       try {
         const code = ma2 ? reloadLuaMa2(name, slot) : reloadLua(name, slot);
-        const r = await bridge.run(bridgeDirFor(ma2 ? 'ma2' : 'ma3'), code, cfg().get('bridge.timeout'));
+        const r = await bridge.run(bridgeDirFor(ma2 ? 'ma2' : 'ma3'), code, Math.max(cfg().get('bridge.timeout'), 10));
         output.appendLine(bridge.formatResult(r));
       } catch (err) {
         output.appendLine(`bridge error: ${err.message}`);
-        vscode.window.showErrorMessage(`Reload failed: ${err.message}`);
+        offerConnect(`Reload failed: ${err.message}`);
       }
   }
 
@@ -718,14 +729,15 @@ function activate(context) {
       if (userSetting('deployOnSave') && /\.(lua|xml)$/i.test(doc.fileName)) {
         try {
           const manifest = findManifest(doc.fileName) && deployFile(doc.fileName, true);
-          // Hot reload: with ma3.deployOnSave.reload on, a running LuaBridge and a pool slot, the saved plugin is re-imported and started.
+          // Hot reload: with ma3.deployOnSaveReload on, a running LuaBridge and a pool slot, the saved plugin is re-imported and started.
           const slot = cfg().get('deployAndRun.slot');
-          if (manifest && slot && userSetting('deployOnSave.reload')) {
+          if (manifest && slot && userSetting('deployOnSaveReload')) {
             const target = manifestIsMa2(manifest) ? 'ma2' : 'ma3';
             if (bridge.status(bridgeDirFor(target)).running) reloadOnConsole(manifest, slot);
           }
-        } catch (_) {
-          /* unrelated file */
+        } catch (err) {
+          // A .lua or .xml that belongs to no plugin is not an error; anything else is shown, not swallowed.
+          if (!/No XML manifest/i.test(String(err && err.message))) output.appendLine(`deploy on save: ${err && err.stack ? err.stack : err}`);
         }
       }
     })
@@ -879,6 +891,11 @@ function activate(context) {
   // ---- run on console through the LuaBridge plugin
   const output = vscode.window.createOutputChannel('grandMA Devkit');
   // A plain confirmation does not need a pop-up the user must dismiss: a few seconds in the status bar, and a line in the panel.
+  // An error about the console connection gets a way forward: the Connect menu (install the LuaBridge, OSC, Telnet).
+  const offerConnect = (msg) =>
+    vscode.window.showErrorMessage(msg, 'Connect...').then((pick) => {
+      if (pick === 'Connect...') vscode.commands.executeCommand('ma3.connect');
+    });
   const notify = (msg) => {
     output.appendLine(msg);
     vscode.window.setStatusBarMessage(`$(check) ${msg}`, 6000);
@@ -912,7 +929,7 @@ function activate(context) {
         }
       } catch (err) {
         output.appendLine(`bridge error: ${err.message}`);
-        vscode.window.showErrorMessage(`Run failed: ${err.message}`);
+        offerConnect(`Run failed: ${err.message}`);
       }
     }),
     vscode.commands.registerCommand('ma3.bridgeStatus', () => {
