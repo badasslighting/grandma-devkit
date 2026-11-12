@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+from html.parser import HTMLParser
 
 help_dir = sys.argv[1]
 here = os.path.dirname(os.path.abspath(__file__))
@@ -15,10 +16,41 @@ root = os.path.dirname(here)
 BASE = 'https://help.malighting.com/grandMA3/2.5/HTML/'
 
 
+class HTMLTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self._skip_depth = 0
+        self._chunks = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in ('script', 'style'):
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag.lower() in ('script', 'style') and self._skip_depth:
+            self._skip_depth -= 1
+
+    def handle_data(self, data):
+        if not self._skip_depth:
+            self._chunks.append(data)
+
+    def handle_entityref(self, name):
+        if not self._skip_depth:
+            self._chunks.append(f"&{name};")
+
+    def handle_charref(self, name):
+        if not self._skip_depth:
+            self._chunks.append(f"&#{name};")
+
+    def get_text(self):
+        return ''.join(self._chunks)
+
+
 def clean(raw):
-    raw = re.sub(r'<script\b[^>]*?>.*?</script\s*>|<style\b[^>]*?>.*?</style\s*>', '', raw, flags=re.S | re.I)
-    raw = re.sub(r'<[^>]+>', ' ', raw)
-    return re.sub(r'\s+', ' ', html.unescape(raw)).replace('\ufeff', '').strip()
+    parser = HTMLTextExtractor()
+    parser.feed(raw)
+    parser.close()
+    return re.sub(r'\s+', ' ', html.unescape(parser.get_text())).replace('\ufeff', '').strip()
 
 
 index = open(os.path.join(help_dir, 'csk_general_keywords.html'), encoding='utf-8', errors='replace').read()
