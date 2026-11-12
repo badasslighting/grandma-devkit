@@ -49,7 +49,7 @@ test('quick fix: not offered where the condition cannot be translated safely', (
     '$a<$b', '$a>=$b', // both types unknown: Lua raises an error on number < text
     '$a=="x]y"', // the console ends the condition at the "]" inside the quotes
     '$a==1 junk',
-  ]) assert.strictEqual(fix(`Cmd("[${c.replace(/"/g, '\\"')}] Go+")`), null, c);
+  ]) assert.strictEqual(fix(`Cmd("[${c.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}] Go+")`), null, c);
   // a text value with == is fine; ordering two numbers is fine
   assert.strictEqual(fix('Cmd("[$a==yes] Go+")'), 'do local v = GetVar(GlobalVars(), "a"); if v ~= nil and tostring(v) == "yes" then Cmd("Go+") end end');
   assert.strictEqual(fix('Cmd("[$a<2.5] Go+")'), 'do ' + PRE('Global', 'a') + '; if v ~= nil and (n and n < 2.5 or not n and tostring(v) < "2.5") then Cmd("Go+") end end');
