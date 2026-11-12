@@ -16,7 +16,7 @@ BASE = 'https://help.malighting.com/grandMA3/2.5/HTML/'
 
 
 def clean(raw):
-    raw = re.sub(r'<script.*?</script>|<style.*?</style>', '', raw, flags=re.S)
+    raw = re.sub(r'<script\b[^>]*?>.*?</script\s*>|<style\b[^>]*?>.*?</style\s*>', '', raw, flags=re.S | re.I)
     raw = re.sub(r'<[^>]+>', ' ', raw)
     return re.sub(r'\s+', ' ', html.unescape(raw)).replace('\ufeff', '').strip()
 
